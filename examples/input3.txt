@@ -1,0 +1,3 @@
+Formatting like italics can appear inside inline blocks: [span]*like so!*[/span].
+
+They can also appear the other way around: **like [span]this[/span]**.
