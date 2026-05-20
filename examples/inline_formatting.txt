@@ -1,0 +1,8 @@
+This is an example of this formatting system.
+
+Italics: *like this*.
+Bold: **like this**.
+Bold italics: ***like this***.
+Underlined: _like this_.
+Struckthrough: ~like this~.
+Small caps: $like this$.

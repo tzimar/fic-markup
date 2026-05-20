@@ -1,0 +1,5 @@
+{ this won't appear in the final document at all! }
+
+Comments can even appear {within text} like this!
+
+*{inside} of {formatting}*

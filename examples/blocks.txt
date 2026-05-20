@@ -1,0 +1,31 @@
+[center]
+  This text will be centered.
+[/center]
+
+Elements can specify their ID and class:
+
+[div.text-messages#from-gf]
+  GG: hiii guys!!!
+  GG: whats up?
+  TG: not much
+[/div]
+
+Elements can appear inline: [i]like this[/i].
+
+This is an example of this formatting system. [span#note.blue]Inline block elements with an ID and classes specified are allowed![/span]
+
+Additionally: [span.red#diff-note]The user may place the ID and class specifiers in any order after the tag name.[/span]
+
+[note]
+  Arbitrary tags are allowed!
+[/note]
+
+[anythingyouwant]
+  Anything you want is allowed!
+[/anythingyouwant]
+
+Formatting like italics can appear inside inline blocks: [span]*like so!*[/span].
+
+[div]Fully inline![/div]
+
+They can also appear the other way around: **like [span]this[/span]**.

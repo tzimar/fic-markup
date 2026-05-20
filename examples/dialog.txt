@@ -1,0 +1,17 @@
+Narration.
+
+= Dialog.
+
+Narration. = Dialog.
+
+= Dialog. = Narration.
+
+Narration. = Dialog. = Narration.
+
+= Dialog. = Narration. = Dialog.
+
+Narration. = Dialog can have *formatting* [span.red]too[/span]. = More narration.
+
+[div.white]
+  = Dialogue can appear within blocks. = Narration.
+[/div]
