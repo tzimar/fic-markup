@@ -1,0 +1,30 @@
+p {
+  text-indent: 2em;
+  text-align: justify;
+  margin-bottom: 0.1em;
+  margin-top: 0.3em;
+}
+
+p.out {
+  text-indent: 0em;
+}
+
+p.section-break {
+  margin-top: 2em;
+  margin-bottom: 2em;
+  text-align: center;
+  text-indent: 0em;
+}
+
+p.minor-section-break {
+  margin-bottom: 3em;
+}
+
+p span.small-caps {
+  font-variant: small-caps;
+}
+
+span.fwsp {
+  width: 0.1em;
+  display: inline-block;
+}

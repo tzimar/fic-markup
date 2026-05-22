@@ -1,0 +1,11 @@
+{
+  "section_break_tag": "p",
+  "section_break_class": "section-break",
+  "section_break_text": "✱ ✱ ✱",
+  "minor_section_break_tag": "p",
+  "minor_section_break_class": "minor-section-break",
+  "minor_section_break_text": "",
+  "not_inset_class": "not-inset",
+  "small_caps_class": "small-caps",
+  "dialog_space_class": "fwsp"
+}

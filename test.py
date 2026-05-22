@@ -7,39 +7,18 @@ files = list(Path('examples').glob('*.txt'))
 success_map: dict[Path, bool] = {file: False for file in files}
 
 for file in files:
-  subprocess.run(['python', 'render.py', str(file), str(file.with_suffix('.test.html'))])
-  
-  # check if output file even exists
-  if not file.with_suffix('.test.html').exists():
-    print(f'Output file {file.with_suffix(".test.html")} does not exist.')
-    continue
-
-  # normalise files before diffing
-  with file.with_suffix('.html').open() as f:
-    normalised_html = ' '.join(f.read().split())
-    with file.with_suffix('.expected.html').open('w') as f:
-      f.write(normalised_html)
-  with file.with_suffix('.test.html').open() as f:
-    normalised_test_html = ' '.join(f.read().split())
-    with file.with_suffix('.actual.html').open('w') as f:
-      f.write(normalised_test_html)
-
-  # show diff and record success
-  result = subprocess.run(['diff', '-u', str(file.with_suffix('.expected.html')), str(file.with_suffix('.actual.html'))], capture_output=True, text=True)
-  if result.returncode == 0:
-    success_map[file] = True
+  subprocess.run(['python', 'render.py', str(file), "-o", str(file.with_suffix('.test.html'))])
+  diff = subprocess.run(['diff', str(file.with_suffix('.html')), str(file.with_suffix('.test.html'))], capture_output=True, text=True)
+  success_map[file] = diff.returncode == 0
+  if diff.returncode != 0:
+    print(f'Differences found in {file}:')
+    print(diff.stdout)
   else:
-    print(f'Diff for {file}:\n{result.stdout}')
+    print(f'No differences found in {file}.')
 
 if len(sys.argv) == 1 or sys.argv[1] != '--keep':
   for file in files:
     test_file = file.with_suffix('.test.html')
-    if test_file.exists():
-      test_file.unlink()
-    test_file = file.with_suffix('.expected.html')
-    if test_file.exists():
-      test_file.unlink()
-    test_file = file.with_suffix('.actual.html')
     if test_file.exists():
       test_file.unlink()
 

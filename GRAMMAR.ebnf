@@ -1,0 +1,39 @@
+identifier = ? html tag name or css class name ? ; 
+
+block = 
+         "[" , identifier , { ("." | "#") , identifier } , "]" , body, "[" , "/" , identifier , "]" 
+       | "[" , identifier , "/" , "]"
+       ;
+
+body = [ body-item , { "\n" , body-item } ] ;
+
+body-item = 
+         para 
+       | section-break 
+       | "[" , ">" , identifier , { ( "." | "#" ) , identifier } , "]" 
+       ;
+
+section-break =
+         "~~~" , { "~" }
+       | ">>>" , { ">" } 
+       ;
+
+para = { prose | para-item } ;
+
+para-item = 
+         block
+       | "***" , para, "***"
+       | "**" , para, "**"
+       | "*" , para, "*"
+       | "_" , para, "_"
+       | "~" , para, "~"
+       | "$" , para, "$"
+       ;
+
+prose = narration , [ "=" , dialog , { "=" , narration } ] ;
+dialog = { text | para-item } ;
+narration = { text | para-item } ;
+
+text = { ? any character ? } ;
+
+file = block ;
