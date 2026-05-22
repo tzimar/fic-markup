@@ -1,5 +1,17 @@
 { this won't appear in the final document at all! }
 
+{
+    multi line
+    comments are
+    allowed
+}
+
 Comments can even appear {within text} like this!
 
 *{inside} of {formatting}*
+
+{
+    [div]
+        markup inside comments is allowed
+    [/div]
+}

@@ -2,7 +2,7 @@
   <p class="not-inset">This text will be centered.</p>
 </center>
 
-<p>Elements can specify their ID and class:</p>
+<p>Blocks can specify their ID and class:</p>
 
 <div class="text-messages" id="from-gf">
 <p>GG: hiii guys!!!</p>
@@ -10,9 +10,20 @@
 <p>TG: not much</p>
 </div>
 
-<p>Elements can appear inline: <i>like this</i>.</p>
+<p>Blocks can appear inline: <i>like this</i>.</p>
 
-<p>This is an example of this formatting system. <span id="note" class="blue">Inline block elements with an ID and classes specified are allowed!</span></p>
+Blocks can be nested:
+
+<div>
+    First level.
+    <div>
+        Second level
+    </div>
+</div>
+
+<div>First. <div>Second.</div></div>
+
+<p>This is an example of this formatting system. <span id="note" class="blue">Inline blocks with an ID and classes specified are allowed!</span></p>
 
 <p>Additionally: <span class="red" id="diff-note">The user may place the ID and class specifiers in any order after the tag name.</span></p>
 
