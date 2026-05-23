@@ -2,7 +2,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-files = list(Path('examples').glob('*.txt'))
+files = list(Path('examples').glob('*.ffml'))
 
 success_map: dict[Path, bool] = {file: False for file in files}
 

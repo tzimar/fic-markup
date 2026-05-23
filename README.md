@@ -1,4 +1,6 @@
-This is a simple markup language combining aspects of BBCode and Markdown, designed for writing fanfics in a format that's flexible but that remains 'plain'.
+# FFML
+
+FFML is a simple markup language combining aspects of BBCode and Markdown, designed for writing fanfics in a format that's flexible but that remains 'plain'.
 
 ## Usage
 
