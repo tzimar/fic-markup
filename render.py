@@ -148,6 +148,10 @@ def render_block(block: Block, ctx: RenderContext, config: RenderConfig, is_root
         # Block-level - wrap body content in <p> tags as needed
         inner = render_body(block.body, ctx, config, is_first_in_parent=is_first)
     tag = block.tag
+
+    if (not inline) and is_inline_tag:
+        return f'<p><{tag}{attrs}>{inner}</{tag}></p>'
+
     return f"<{tag}{attrs}>{inner}</{tag}>"
 
 
@@ -172,29 +176,6 @@ def render_body(body: Body, ctx: RenderContext, config: RenderConfig, is_first_i
             is_first_item = True  # Next item after section break is "first"
 
     return "\n".join(lines)
-
-
-def render_body_inline(body: Body, ctx: RenderContext, config: RenderConfig) -> str:
-    """Render a body for inline content (inside a block element)."""
-    lines: List[str] = []
-    is_first_para = True
-    for item in body.items:
-        if isinstance(item, ArrowBlock):
-            continue
-        elif isinstance(item, Paragraph):
-            content = render_para_content(item, config)
-            if content.strip():
-                # First paragraph in an inline block still gets not-inset
-                if is_first_para and config.not_inset_class != "":
-                    lines.append(f'<p class="{config.not_inset_class}">{content}</p>')
-                    is_first_para = False
-                else:
-                    lines.append(f"<p>{content}</p>")
-        elif isinstance(item, SectionBreak):
-            lines.append(render_section_break(item, config))
-            is_first_para = True
-    return "\n".join(lines)
-
 
 def render_body_inline_content(body: Body, config: RenderConfig) -> str:
     """Render a body inline (for inline blocks like span, i, b)."""
@@ -221,12 +202,8 @@ def render_paragraph(para: Paragraph, is_first: bool = False, extra_modifiers: L
             block.modifiers.extend(extra_modifiers)
         ctx = RenderContext()
         
-        # Check if this is an inline block
-        inline_tags = {"span", "i", "b", "u", "em", "strong", "small", "code", "kbd", "var"}
-        is_inline = block.tag.lower() in inline_tags
-        
         # Pass is_first flag to block rendering
-        return render_block(block, ctx, config, inline=is_inline, is_first=is_first)
+        return render_block(block, ctx, config, inline=False, is_first=is_first)
 
     content = render_para_content(para, config)
     if not content.strip():

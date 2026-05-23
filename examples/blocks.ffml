@@ -40,3 +40,5 @@ Formatting like italics can appear inside inline blocks: [span]*like so!*[/span]
 [div]Fully inline![/div]
 
 They can also appear the other way around: **like [span]this[/span]**.
+
+[span.red]The red truth.[/span]
