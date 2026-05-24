@@ -6,6 +6,7 @@ import dataclasses
 import json
 import re
 import sys
+import html
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
@@ -18,9 +19,9 @@ class ParseError(Exception):
 def normalise_input(text: str) -> str:
 
     subs = [
-        ( r'\{[\s\S]*?\}', r'' ),
-        ( r'\n+', r'\n' ),
-        ( r'[ \t]+', r' ' ),
+        (r"\{[\s\S]*?\}", r""),
+        (r"\n+", r"\n"),
+        (r"[ \t]+", r" "),
     ]
 
     for sub in subs:
@@ -29,29 +30,29 @@ def normalise_input(text: str) -> str:
     text = f"[;{text}]"
     return text
 
+
 def normalise_text(text: str) -> str:
     subs = [
-        ( r'`', r''),
-        ( r'\.\.\.', r'…' ),
-        ( r'"(.*?)"', r'“\1”' ),
-        ( r'\'', r'’' ),
-        ( r'---', r'—' ),
-        ( r'--', r'–' ),
-        ( r' - ', r' – ' ),
-
-        #( r'- ', r'– ' ),
-        #( r'-$', r'–' ),
+        (r"`", r""),
+        (r"\.\.\.", r"…"),
+        (r'"(.*?)"', r"“\1”"),
+        (r"\'", r"’"),
+        (r"---", r"—"),
+        (r"--", r"–"),
+        (r" - ", r" – "),
+        # ( r'- ', r'– ' ),
+        # ( r'-$', r'–' ),
     ]
 
     for sub in subs:
         text = re.sub(sub[0], sub[1], text)
 
-    return text
+    return html.escape(text)
+
 
 @dataclass
 class Node:
     pass
-
 
 
 @dataclass
@@ -69,10 +70,12 @@ class Break(Node):
     marker: str
     count: int
 
+
 @dataclass
 class OutlineBlock(Node):
     modifiers: List[Tuple[str, str]]
     body: Body
+
 
 @dataclass
 class InlineBlock(Node):
@@ -122,13 +125,15 @@ class Parser:
         self.length = len(text)
         self.trace_enabled = trace_enabled
         self.trace_depth = 0
-        self.break_types = [ "=", "-", ">", "<" ]
+        self.break_types = ["=", "-", ">", "<"]
 
     def trace_enter(self, function_name: Optional[str] = None) -> None:
         if not self.trace_enabled:
             return
         indent = "--" * self.trace_depth
-        print(f"{indent} >>>: {function_name} pos={self.pos}, next={self.text[self.pos:self.pos+20]!r}")
+        print(
+            f"{indent} >>>: {function_name} pos={self.pos}, next={self.text[self.pos:self.pos+20]!r}"
+        )
         self.trace_depth += 1
 
     def trace_exit(self, function_name: Optional[str] = None) -> None:
@@ -136,7 +141,9 @@ class Parser:
             return
         self.trace_depth -= 1
         indent = "--" * self.trace_depth
-        print(f"{indent} <<<: {function_name} pos={self.pos}, next={self.text[self.pos:self.pos+20]!r}")
+        print(
+            f"{indent} <<<: {function_name} pos={self.pos}, next={self.text[self.pos:self.pos+20]!r}"
+        )
 
     def trace_emit(self, node: Node) -> None:
         if not self.trace_enabled:
@@ -192,7 +199,13 @@ class Parser:
         self.trace_enter("parse_narration_or_dialog")
         items: List[Node] = []
         while True:
-            if self.at_eof() or self.peek("\n") or self.peek(boundary) or self.peek(">") or self.peek("]"):
+            if (
+                self.at_eof()
+                or self.peek("\n")
+                or self.peek(boundary)
+                or self.peek(">")
+                or self.peek("]")
+            ):
                 break
             node = self.try_parse_paragraph_item()
             if node is not None:
@@ -201,7 +214,7 @@ class Parser:
             text_node = self.parse_text(boundary)
             if not text_node is None:
                 items.append(text_node)
-            
+
         self.trace_exit("parse_narration_or_dialog")
         return items
 
@@ -215,7 +228,12 @@ class Parser:
                     in_escaped_text = False
                 self.advance(1)
                 continue
-            if self.peek("\n") or self.peek(boundary) or self.peek(">") or self.peek("]"):
+            if (
+                self.peek("\n")
+                or self.peek(boundary)
+                or self.peek(">")
+                or self.peek("]")
+            ):
                 break
             if self.peek("<"):
                 break
@@ -246,7 +264,9 @@ class Parser:
             self.trace_exit("try_parse_paragraph_item")
             return None
         except ParseError:
-            print(f"Backtracking from position {self.pos} to {snapshot} due to parse error")
+            print(
+                f"Backtracking from position {self.pos} to {snapshot} due to parse error"
+            )
             self.pos = snapshot
             self.trace_exit("try_parse_paragraph_item")
             return None
@@ -281,7 +301,7 @@ class Parser:
         return InlineBlock(modifiers=modifiers, para=para)
 
     def parse_break(self) -> Break:
-        self.trace_enter("parse_break")       
+        self.trace_enter("parse_break")
 
         for break_type in self.break_types:
             if self.peek(break_type * 3):
@@ -303,20 +323,24 @@ class Parser:
         end_pos = self.find_closing_marker(marker)
         if end_pos < 0:
             self.trace_exit(f"parse_emphasis(marker={marker!r})")
-            raise ParseError(f"Unterminated emphasis marker {marker!r} at position {self.pos}")
+            raise ParseError(
+                f"Unterminated emphasis marker {marker!r} at position {self.pos}"
+            )
         self.advance(len(marker))
         content_text = self.text[self.pos : end_pos]
         inner_parser = Parser(content_text)
         content_para = inner_parser.parse_paragraph()
         if not inner_parser.at_eof():
             self.trace_exit(f"parse_emphasis(marker={marker!r})")
-            raise ParseError(f"Could not consume emphasis content for marker {marker!r}")
+            raise ParseError(
+                f"Could not consume emphasis content for marker {marker!r}"
+            )
         self.pos = end_pos + len(marker)
         self.trace_exit(f"parse_emphasis(marker={marker!r})")
         return Emphasis(marker=marker, content=content_para)
 
     def find_closing_marker(self, marker: str) -> int:
-        #self.trace_enter(f"find_closing_marker(marker={marker!r})")
+        # self.trace_enter(f"find_closing_marker(marker={marker!r})")
         search_pos = self.pos + len(marker)
         while search_pos < self.length:
             if self.peek_at(search_pos, "\n"):
@@ -379,17 +403,19 @@ class Parser:
             self.advance(1)
 
     def peek(self, token: str) -> bool:
-        #print(f"PEEK: token={token!r} pos={self.pos} next={self.text[self.pos:self.pos+20]!r}")
+        # print(f"PEEK: token={token!r} pos={self.pos} next={self.text[self.pos:self.pos+20]!r}")
         return self.text.startswith(token, self.pos)
 
     def expect(self, token: str) -> None:
-        #print(f"EXPECT: token={token!r} pos={self.pos} next={self.text[self.pos:self.pos+20]!r}")
+        # print(f"EXPECT: token={token!r} pos={self.pos} next={self.text[self.pos:self.pos+20]!r}")
         if not self.peek(token):
-            raise ParseError(f"Expected {token!r} at position {self.pos} but found {self.text[self.pos:self.pos+20]!r}")
+            raise ParseError(
+                f"Expected {token!r} at position {self.pos} but found {self.text[self.pos:self.pos+20]!r}"
+            )
         self.advance(len(token))
 
     def peek_at(self, position: int, token: str) -> bool:
-        #print(f"PEEK_AT: token={token!r} pos={position} next={self.text[position:position+20]!r}")
+        # print(f"PEEK_AT: token={token!r} pos={position} next={self.text[position:position+20]!r}")
         return self.text.startswith(token, position)
 
     def advance(self, count: int = 1) -> None:
