@@ -5,7 +5,11 @@ p {
   margin-top: 0.3em;
 }
 
-p.not-inset {
+br {
+  display: none;
+}
+
+br + p {
   text-indent: 0em;
 }
 

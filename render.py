@@ -41,7 +41,6 @@ class BreakType:
 @dataclass
 class RenderConfig:
     break_types: Dict[str, BreakType] = None
-    not_inset_class: str = "not-inset"
     small_caps_class: str = "small-caps"
     dialog_space_class: str = "fwsp"
 
@@ -65,7 +64,6 @@ class RenderConfig:
                 )
                 for k, v in raw.get("breaks", {}).items()
             },
-            not_inset_class=raw.get("not_inset_class", cls.not_inset_class),
             small_caps_class=raw.get("small_caps_class", cls.small_caps_class),
             dialog_space_class=raw.get("dialog_space_class", cls.dialog_space_class),
         )
@@ -169,13 +167,11 @@ def render_paragraph(
         return ""
 
     modifiers: List[Tuple[str, str]] = []
-    if is_first and config.not_inset_class != "":
-        modifiers.append((".", config.not_inset_class))
     if extra_modifiers:
         modifiers.extend(extra_modifiers)
 
     attrs = render_attributes(modifiers)
-    return f"<p{attrs}>{content}</p>"
+    return f"{'<br />' if is_first else ''}<p{attrs}>{content}</p>"
 
 
 def render_para_content(para: Paragraph, config: RenderConfig) -> str:

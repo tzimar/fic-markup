@@ -49,13 +49,13 @@ The configuration file allows the user to customise aspects of the rendering. `c
       "class": "soft-break"
     },
     ">": {
-      "tag": "br"
+      "tag": "br",
+      "class": "line-break"
     },
     "<": {
       
     }
   },
-  "not_inset_class": "not-inset",
   "small_caps_class": "small-caps",
   "dialog_space_class": "fwsp"
 }
