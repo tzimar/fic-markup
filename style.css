@@ -5,18 +5,18 @@ p {
   margin-top: 0.3em;
 }
 
-p.out {
+p.not-inset {
   text-indent: 0em;
 }
 
-p.section-break {
+p.hard-break {
   margin-top: 2em;
   margin-bottom: 2em;
   text-align: center;
   text-indent: 0em;
 }
 
-p.minor-section-break {
+p.soft-break {
   margin-bottom: 3em;
 }
 
@@ -27,4 +27,8 @@ p span.small-caps {
 span.fwsp {
   width: 0.1em;
   display: inline-block;
+}
+
+div.center {
+  text-align: center;
 }

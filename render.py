@@ -12,67 +12,35 @@ from typing import Any, Dict, List, Optional, Tuple
 import html
 
 from parse import (
-    ArrowBlock,
-    Block,
+    OutlineBlock,
+    InlineBlock,
     Body,
     Dialogue,
     Emphasis,
     Narration,
     Node,
     Paragraph,
-    Prose,
-    SectionBreak,
+    Break,
     Text,
     parse,
 )
 
 
 class RenderContext:
-    """Context for rendering, tracking arrow block modifiers."""
+    """Context for rendering."""
 
     def __init__(self) -> None:
-        self.arrow_modifiers: dict[int, List[Tuple[str, str]]] = {}
+        pass
 
-    def apply_arrow_blocks(self, body: Body) -> None:
-        """Pre-process arrow blocks and track which items they apply to."""
-        pending_arrows: List[Tuple[str, List[Tuple[str, str]]]] = []
-
-        for i, item in enumerate(body.items):
-            if isinstance(item, ArrowBlock):
-                pending_arrows.append((item.tag, item.modifiers))
-            else:
-                # Apply pending arrows to this item if the tag matches
-                if pending_arrows:
-                    if isinstance(item, Paragraph) and any(tag == "p" for tag, _ in pending_arrows):
-                        modifiers = []
-                        for tag, mods in pending_arrows:
-                            if tag == "p":
-                                modifiers.extend(mods)
-                        if modifiers:
-                            self.arrow_modifiers[i] = modifiers
-                        pending_arrows = [(tag, mods) for tag, mods in pending_arrows if tag != "p"]
-                    elif isinstance(item, Block) and any(tag == item.tag for tag, _ in pending_arrows):
-                        modifiers = []
-                        for tag, mods in pending_arrows:
-                            if tag == item.tag:
-                                modifiers.extend(mods)
-                        if modifiers:
-                            self.arrow_modifiers[i] = modifiers
-                        pending_arrows = [(tag, mods) for tag, mods in pending_arrows if tag != item.tag]
-
-    def get_arrow_modifiers(self, index: int) -> List[Tuple[str, str]]:
-        """Get arrow modifiers for a specific body item index."""
-        return self.arrow_modifiers.get(index, [])
-
+@dataclass
+class BreakType:
+    tag: Optional[str]
+    class_attr: Optional[str]
+    text: Optional[str]
 
 @dataclass
 class RenderConfig:
-    section_break_tag: str = "hr"
-    section_break_class: str = "section-break"
-    section_break_text: str = ""
-    minor_section_break_tag: str = "p"
-    minor_section_break_class: str = "minor-section-break"
-    minor_section_break_text: str = ""
+    break_types: Dict[str, BreakType] = None
     not_inset_class: str = "not-inset"
     small_caps_class: str = "small-caps"
     dialog_space_class: str = "fwsp"
@@ -87,12 +55,7 @@ class RenderConfig:
             raise ValueError("Configuration file must contain an object at the top level")
 
         return cls(
-            section_break_tag=raw.get("section_break_tag", cls.section_break_tag),
-            section_break_class=raw.get("section_break_class", cls.section_break_class),
-            section_break_text=raw.get("section_break_text", cls.section_break_text),
-            minor_section_break_tag=raw.get("minor_section_break_tag", cls.minor_section_break_tag),
-            minor_section_break_class=raw.get("minor_section_break_class", cls.minor_section_break_class),
-            minor_section_break_text=raw.get("minor_section_break_text", cls.minor_section_break_text),
+            break_types={k: BreakType(tag=v.get("tag", None), class_attr=v.get("class", None), text=v.get("text", None)) for k, v in raw.get("breaks", {}).items()},
             not_inset_class=raw.get("not_inset_class", cls.not_inset_class),
             small_caps_class=raw.get("small_caps_class", cls.small_caps_class),
             dialog_space_class=raw.get("dialog_space_class", cls.dialog_space_class),
@@ -114,21 +77,19 @@ def load_config(path: Optional[Path] = None) -> RenderConfig:
     return RenderConfig()
 
 
-def render_html(ast: Block, config: RenderConfig) -> str:
+def render_html(ast: OutlineBlock, config: RenderConfig) -> str:
     """Render an AST into HTML."""
     ctx = RenderContext()
-    ctx.apply_arrow_blocks(ast.body)
-    return render_block(ast, ctx, config, is_root=True)
+    return render_outline_block(ast, ctx, config, is_root=True)
 
 
-def render_block(block: Block, ctx: RenderContext, config: RenderConfig, is_root: bool = False, inline: bool = False, is_first: bool = False) -> str:
+def render_outline_block(block: OutlineBlock, ctx: RenderContext, config: RenderConfig, is_root: bool = False, is_first: bool = False) -> str:
     """Render a block element.
     
     Args:
         block: The block to render
         ctx: Rendering context
         is_root: Whether this is the root document block
-        inline: Whether to render inline (don't wrap body content in <p> tags)
         is_first: Whether this block is the first in its parent body (affects not-inset)
     """
     if is_root:
@@ -137,23 +98,15 @@ def render_block(block: Block, ctx: RenderContext, config: RenderConfig, is_root
 
     attrs = render_attributes(block.modifiers)
     
-    # Determine if this is a purely inline tag
-    inline_tags = {"span", "i", "b", "u", "em", "strong", "small", "code", "kbd", "var"}
-    is_inline_tag = block.tag.lower() in inline_tags
-    
-    if inline or is_inline_tag:
-        # Inline block - render body content directly without <p> wrapping
-        inner = render_body_inline_content(block.body, config)
-    else:
-        # Block-level - wrap body content in <p> tags as needed
-        inner = render_body(block.body, ctx, config, is_first_in_parent=is_first)
-    tag = block.tag
+    inner = render_body(block.body, ctx, config, is_first_in_parent=is_first)
 
-    if (not inline) and is_inline_tag:
-        return f'<p><{tag}{attrs}>{inner}</{tag}></p>'
+    return f"<div{attrs}>{inner}</div>"
 
-    return f"<{tag}{attrs}>{inner}</{tag}>"
-
+def render_inline_block(block: InlineBlock, ctx: RenderContext, config: RenderConfig) -> str:
+    """Render an inline block element."""
+    attrs = render_attributes(block.modifiers)
+    inner = render_para_content(block.para, config)
+    return f"<span{attrs}>{inner}</span>"
 
 def render_body(body: Body, ctx: RenderContext, config: RenderConfig, is_first_in_parent: bool = False) -> str:
     """Render a body with its items."""
@@ -161,16 +114,16 @@ def render_body(body: Body, ctx: RenderContext, config: RenderConfig, is_first_i
     is_first_item = is_first_in_parent
 
     for i, item in enumerate(body.items):
-        if isinstance(item, ArrowBlock):
-            # Skip rendering arrow blocks
-            continue
-        elif isinstance(item, Paragraph):
-            arrow_modifiers = ctx.get_arrow_modifiers(i)
-            html = render_paragraph(item, is_first_item, arrow_modifiers, config)
+        if isinstance(item, Paragraph):
+            html = render_paragraph(item, is_first_item, None, config)
             if html:  # Only add non-empty paragraphs
                 lines.append(html)
                 is_first_item = False
-        elif isinstance(item, SectionBreak):
+        if isinstance(item, OutlineBlock):
+            html = render_outline_block(item, ctx, config, is_root=False, is_first=is_first_item)
+            lines.append(html)
+            is_first_item = True
+        elif isinstance(item, Break):
             html = render_section_break(item, config)
             lines.append(html)
             is_first_item = True  # Next item after section break is "first"
@@ -183,7 +136,7 @@ def render_body_inline_content(body: Body, config: RenderConfig) -> str:
     for item in body.items:
         if isinstance(item, Paragraph):
             parts.append(render_para_content(item, config))
-        elif isinstance(item, SectionBreak):
+        elif isinstance(item, Break):
             parts.append(render_section_break(item, config))
     return "".join(parts)
 
@@ -191,25 +144,14 @@ def render_body_inline_content(body: Body, config: RenderConfig) -> str:
 
 def render_paragraph(para: Paragraph, is_first: bool = False, extra_modifiers: List[Tuple[str, str]] | None = None, config: RenderConfig = RenderConfig()) -> str:
     """Render a paragraph element."""
-    if not para.items:
+    if not para.parts:
         return ""
-
-    # Special case: if paragraph contains only a single block, render the block directly
-    if len(para.items) == 1 and isinstance(para.items[0], Block):
-        block = para.items[0]
-        # Apply extra modifiers to the block
-        if extra_modifiers:
-            block.modifiers.extend(extra_modifiers)
-        ctx = RenderContext()
-        
-        # Pass is_first flag to block rendering
-        return render_block(block, ctx, config, inline=False, is_first=is_first)
 
     content = render_para_content(para, config)
     if not content.strip():
         return ""
 
-    modifiers: List[Tuple[str, str]] = []
+    modifiers: List[str] = []
     if is_first and config.not_inset_class != "":
         modifiers.append((".", config.not_inset_class))
     if extra_modifiers:
@@ -220,27 +162,9 @@ def render_paragraph(para: Paragraph, is_first: bool = False, extra_modifiers: L
 
 
 def render_para_content(para: Paragraph, config: RenderConfig) -> str:
-    """Render the content of a paragraph."""
-    parts: List[str] = []
-    ctx = RenderContext()
-    for item in para.items:
-        if isinstance(item, Prose):
-            parts.append(render_prose(item, config))
-        elif isinstance(item, Block):
-            # Render blocks inline (without extra paragraph wrapping)
-            # Blocks inside paragraphs are not "first" in their parent
-            parts.append(render_block(item, ctx, config, inline=True, is_first=False))
-        elif isinstance(item, Emphasis):
-            parts.append(render_emphasis(item, config))
-        elif isinstance(item, Text):
-            parts.append(item.content)
-    return "".join(parts)
-
-
-def render_prose(prose: Prose, config: RenderConfig) -> str:
     """Render prose with narration and dialogue."""
     parts: List[str] = []
-    for i, part in enumerate(prose.parts):
+    for i, part in enumerate(para.parts):
         if isinstance(part, Narration):
             if i > 0:
                 # After dialogue, add spacing before narration
@@ -274,10 +198,10 @@ def render_content_items(items: List[Node], config: RenderConfig) -> str:
     for item in items:
         if isinstance(item, Text):
             parts.append(html.escape(item.content))
-        elif isinstance(item, Block):
+        elif isinstance(item, InlineBlock):
             # Render blocks inline within narration/dialogue
             # Blocks inside narration/dialogue are not "first" in their parent
-            parts.append(render_block(item, ctx, config, inline=True, is_first=False))
+            parts.append(render_inline_block(item, ctx, config))
         elif isinstance(item, Emphasis):
             parts.append(render_emphasis(item, config))
         elif isinstance(item, Paragraph):
@@ -306,12 +230,12 @@ def render_emphasis(emphasis: Emphasis, config: RenderConfig) -> str:
         return content
 
 
-def render_section_break(section_break: SectionBreak, config: RenderConfig) -> str:
+def render_section_break(section_break: Break, config: RenderConfig) -> str:
     """Render a section break."""
-    if section_break.marker == "~":
-        return f'<{config.section_break_tag} class="{config.section_break_class}">{config.section_break_text}</{config.section_break_tag}>'
-    elif section_break.marker == ">":
-        return f'<{config.minor_section_break_tag} class="{config.minor_section_break_class}">{config.minor_section_break_text}</{config.minor_section_break_tag}>'
+    for break_marker, break_type in config.break_types.items():
+        if section_break.marker == break_marker and break_type.tag is not None:
+            attrs = render_attributes([(".", break_type.class_attr)] if break_type.class_attr else [])
+            return f'<{break_type.tag}{attrs}>{break_type.text or ""}</{break_type.tag}>'
     return ""
 
 

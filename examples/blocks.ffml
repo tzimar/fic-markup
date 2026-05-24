@@ -1,44 +1,32 @@
-[center]
+[.center;
   This text will be centered.
-[/center]
+]
 
 Blocks can specify their ID and class:
 
-[div.text-messages#from-gf]
+[from-gf.text-messages;
   GG: hiii guys!!!
   GG: whats up?
   TG: not much
-[/div]
+]
 
-Blocks can appear inline: [i]like this[/i].
+Blocks can appear inline: <.red; like this>.
 
 Blocks can be nested:
 
-[div]
+[;
     First level.
-    [div]
+    [;
         Second level
-    [/div]
-[/div]
+    ]
+]
 
-[div]First. [div]Second.[/div][/div]
+This is an example of this formatting system. <note.blue;Inline blocks with an ID and classes specified are allowed!>
 
-This is an example of this formatting system. [span#note.blue]Inline blocks with an ID and classes specified are allowed![/span]
+Formatting like italics can appear inside inline blocks: <;*like so!*>.
 
-Additionally: [span.red#diff-note]The user may place the ID and class specifiers in any order after the tag name.[/span]
+[;Fully inline!]
 
-[note]
-  Arbitrary tags are allowed!
-[/note]
+They can also appear the other way around: **like <;this>**.
 
-[anythingyouwant]
-  Anything you want is allowed!
-[/anythingyouwant]
-
-Formatting like italics can appear inside inline blocks: [span]*like so!*[/span].
-
-[div]Fully inline![/div]
-
-They can also appear the other way around: **like [span]this[/span]**.
-
-[span.red]The red truth.[/span]
+<.red; The red truth.>

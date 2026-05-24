@@ -7,7 +7,11 @@ files = list(Path('examples').glob('*.ffml'))
 success_map: dict[Path, bool] = {file: False for file in files}
 
 for file in files:
-  subprocess.run(['python', 'render.py', str(file), "-o", str(file.with_suffix('.test.html'))])
+  render = subprocess.run(['python', 'render.py', str(file), "-o", str(file.with_suffix('.test.html'))])
+  if render.returncode != 0:
+    print(f'Error running render.py on {file}:\n{render.stderr}')
+    continue
+
   diff = subprocess.run(['diff', str(file.with_suffix('.html')), str(file.with_suffix('.test.html'))], capture_output=True, text=True)
   success_map[file] = diff.returncode == 0
   if diff.returncode != 0:

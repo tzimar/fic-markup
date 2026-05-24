@@ -21,6 +21,17 @@ def normalise_input(text: str) -> str:
         ( r'\{[\s\S]*?\}', r'' ),
         ( r'\n+', r'\n' ),
         ( r'[ \t]+', r' ' ),
+    ]
+
+    for sub in subs:
+        text = re.sub(sub[0], sub[1], text)
+
+    text = f"[;{text}]"
+    return text
+
+def normalise_text(text: str) -> str:
+    subs = [
+        ( r'`', r''),
         ( r'\.\.\.', r'…' ),
         ( r'"(.*?)"', r'“\1”' ),
         ( r'\'', r'’' ),
@@ -35,9 +46,7 @@ def normalise_input(text: str) -> str:
     for sub in subs:
         text = re.sub(sub[0], sub[1], text)
 
-    text = f"[document]{text}[/document]"
     return text
-
 
 @dataclass
 class Node:
@@ -52,37 +61,29 @@ class Body(Node):
 
 @dataclass
 class Paragraph(Node):
-    items: List[Node]
+    parts: List[Node]
 
 
 @dataclass
-class SectionBreak(Node):
+class Break(Node):
     marker: str
     count: int
 
-
 @dataclass
-class Block(Node):
-    tag: str
+class OutlineBlock(Node):
     modifiers: List[Tuple[str, str]]
     body: Body
 
-
 @dataclass
-class ArrowBlock(Node):
-    tag: str
+class InlineBlock(Node):
     modifiers: List[Tuple[str, str]]
+    para: Paragraph
 
 
 @dataclass
 class Emphasis(Node):
     marker: str
     content: Paragraph
-
-
-@dataclass
-class Prose(Node):
-    parts: List[Node]
 
 
 @dataclass
@@ -100,7 +101,7 @@ class Text(Node):
     content: str
 
 
-BodyItem = Union[Paragraph, SectionBreak, ArrowBlock]
+BodyItem = Union[Paragraph, Break]
 
 
 def ast_to_dict(node):
@@ -121,6 +122,7 @@ class Parser:
         self.length = len(text)
         self.trace_enabled = trace_enabled
         self.trace_depth = 0
+        self.break_types = [ "=", "-", ">", "<" ]
 
     def trace_enter(self, function_name: Optional[str] = None) -> None:
         if not self.trace_enabled:
@@ -136,6 +138,12 @@ class Parser:
         indent = "--" * self.trace_depth
         print(f"{indent} <<<: {function_name} pos={self.pos}, next={self.text[self.pos:self.pos+20]!r}")
 
+    def trace_emit(self, node: Node) -> None:
+        if not self.trace_enabled:
+            return
+        indent = "--" * self.trace_depth
+        print(f"{indent} NODE: {node}")
+
     def parse_body(self) -> Body:
         self.trace_enter("parse_body")
         items: List[BodyItem] = []
@@ -143,43 +151,25 @@ class Parser:
             self.skip_spaces()
             if self.at_eof():
                 break
-            if self.next_is_closing_block_tag():
+            if self.peek("]"):
                 break
             if self.peek("\n"):
                 self.advance(1)
                 continue
-            if self.peek_section_break():
-                items.append(self.parse_section_break())
-            elif self.peek_arrow_block_start():
-                items.append(self.parse_arrow_block())
+            if self.peek_break():
+                items.append(self.parse_break())
+            elif self.peek("["):
+                items.append(self.parse_outline_block())
             else:
-                items.append(self.parse_para())
+                items.append(self.parse_paragraph())
             self.skip_spaces()
             if self.peek("\n"):
                 self.advance(1)
         self.trace_exit("parse_body")
         return Body(items=items)
 
-    def parse_para(self) -> Paragraph:
-        self.trace_enter("parse_para")
-        items: List[Node] = []
-        while True:
-            self.skip_spaces()
-            if self.at_eof() or self.peek("\n") or self.next_is_closing_block_tag():
-                break
-            node = self.try_parse_para_item()
-            if node is not None:
-                items.append(node)
-                continue
-            prose = self.parse_prose()
-            if not prose.parts:
-                break
-            items.append(prose)
-        self.trace_exit("parse_para")
-        return Paragraph(items=items)
-
-    def parse_prose(self) -> Prose:
-        self.trace_enter("parse_prose")
+    def parse_paragraph(self) -> Paragraph:
+        self.trace_enter("parse_paragraph")
         parts: List[Node] = []
         narration = self.parse_narration_or_dialog(boundary="=")
         parts.append(Narration(items=narration))
@@ -193,111 +183,117 @@ class Parser:
                 parts.append(Narration(items=narration))
             else:
                 break
-        self.trace_exit("parse_prose")
-        return Prose(parts=parts)
+        self.trace_exit("parse_paragraph")
+        para = Paragraph(parts=parts)
+        self.trace_emit(para)
+        return para
 
     def parse_narration_or_dialog(self, boundary: str) -> List[Node]:
         self.trace_enter("parse_narration_or_dialog")
         items: List[Node] = []
         while True:
-            if self.at_eof() or self.peek("\n") or self.peek(boundary) or self.next_is_closing_block_tag():
+            if self.at_eof() or self.peek("\n") or self.peek(boundary) or self.peek(">") or self.peek("]"):
                 break
-            node = self.try_parse_para_item()
+            node = self.try_parse_paragraph_item()
             if node is not None:
                 items.append(node)
                 continue
             text_node = self.parse_text(boundary)
-            if text_node is None or not text_node.content:
-                break
-            items.append(text_node)
+            if not text_node is None:
+                items.append(text_node)
+            
         self.trace_exit("parse_narration_or_dialog")
         return items
 
     def parse_text(self, boundary: str) -> Optional[Text]:
         self.trace_enter("parse_text")
         start = self.pos
+        in_escaped_text = False
         while not self.at_eof():
-            if self.peek("\n") or self.peek(boundary) or self.next_is_closing_block_tag():
+            if in_escaped_text:
+                if self.peek("`"):
+                    in_escaped_text = False
+                self.advance(1)
+                continue
+            if self.peek("\n") or self.peek(boundary) or self.peek(">") or self.peek("]"):
                 break
-            if self.peek("[") and self.peek_block_or_arrow_or_closing():
+            if self.peek("<"):
                 break
             if self.peek_emphasis_start():
                 break
+            if self.peek("`"):
+                in_escaped_text = True
             self.advance(1)
         if self.pos == start:
             self.trace_exit("parse_text")
             return None
         self.trace_exit("parse_text")
-        return Text(content=self.text[start : self.pos])
+        return Text(content=normalise_text(self.text[start : self.pos]))
 
-    def try_parse_para_item(self) -> Optional[Node]:
+    def try_parse_paragraph_item(self) -> Optional[Node]:
+        self.trace_enter("try_parse_paragraph_item")
         snapshot = self.pos
         try:
-            if self.peek("[") and not self.peek("[/"):
-                if self.peek_arrow_block_start():
-                    return None
-                return self.parse_block()
+            if self.peek("<"):
+                return self.parse_inline_block()
             for marker in ["***", "**", "*", "_", "~", "$"]:
                 if self.peek(marker):
                     emphasis = self.parse_emphasis(marker)
                     if emphasis is not None:
+                        self.trace_exit("try_parse_paragraph_item")
                         return emphasis
                     break
+            self.trace_exit("try_parse_paragraph_item")
             return None
         except ParseError:
             print(f"Backtracking from position {self.pos} to {snapshot} due to parse error")
             self.pos = snapshot
+            self.trace_exit("try_parse_paragraph_item")
             return None
 
-    def parse_block(self) -> Block:
-        self.trace_enter("parse_block")
+    def parse_outline_block(self) -> OutlineBlock:
+        self.trace_enter("parse_outline_block")
         self.expect("[")
         self.skip_spaces()
-        tag = self.parse_identifier()
         modifiers = self.parse_modifiers()
         self.skip_spaces()
-        if self.peek("/"):
-            self.expect("/")
-            self.skip_spaces()
-            self.expect("]")
-            self.trace_exit("parse_block")
-            return Block(tag=tag, modifiers=modifiers, body=Body(items=[]))
+        if self.peek(";"):
+            self.expect(";")
+            body = self.parse_body()
+        self.skip_spaces()
         self.expect("]")
-        body = self.parse_body()
-        self.parse_closing_tag(tag)
-        self.trace_exit("parse_block")
-        return Block(tag=tag, modifiers=modifiers, body=body)
+        self.trace_exit("parse_outline_block")
+        return OutlineBlock(modifiers=modifiers, body=body)
 
-    def parse_arrow_block(self) -> ArrowBlock:
-        self.trace_enter("parse_arrow_block")
-        self.expect("[")
+    def parse_inline_block(self) -> InlineBlock:
+        self.trace_enter("parse_inline_block")
+        self.expect("<")
+        self.skip_spaces()
+        modifiers = self.parse_modifiers()
+        self.skip_spaces()
+        if self.peek(";"):
+            self.expect(";")
+            self.skip_spaces()
+            para = self.parse_paragraph()
         self.skip_spaces()
         self.expect(">")
-        self.skip_spaces()
-        tag = self.parse_identifier()
-        modifiers = self.parse_modifiers()
-        self.skip_spaces()
-        self.expect("]")
-        self.trace_exit("parse_arrow_block")
-        return ArrowBlock(tag=tag, modifiers=modifiers)
+        self.trace_exit("parse_inline_block")
+        return InlineBlock(modifiers=modifiers, para=para)
 
-    def parse_section_break(self) -> SectionBreak:
-        self.trace_enter("parse_section_break")
-        if self.peek("~~~"):
-            count = 0
-            while self.peek("~"):
-                self.advance(1)
-                count += 1
-            return SectionBreak(marker="~", count=count)
-        if self.peek(">>>"):
-            count = 0
-            while self.peek(">"):
-                self.advance(1)
-                count += 1
-            self.trace_exit("parse_section_break")
-            return SectionBreak(marker=">", count=count)
-        self.trace_exit("parse_section_break")
-        raise ParseError(f"Expected section break at position {self.pos}")
+    def parse_break(self) -> Break:
+        self.trace_enter("parse_break")       
+
+        for break_type in self.break_types:
+            if self.peek(break_type * 3):
+                count = 0
+                while self.peek(break_type):
+                    self.advance(1)
+                    count += 1
+                self.trace_exit("parse_break")
+                return Break(marker=break_type, count=count)
+
+        self.trace_exit("parse_break")
+        raise ParseError(f"Expected break at position {self.pos}")
 
     def parse_emphasis(self, marker: str) -> Optional[Emphasis]:
         self.trace_enter(f"parse_emphasis(marker={marker!r})")
@@ -311,7 +307,7 @@ class Parser:
         self.advance(len(marker))
         content_text = self.text[self.pos : end_pos]
         inner_parser = Parser(content_text)
-        content_para = inner_parser.parse_para()
+        content_para = inner_parser.parse_paragraph()
         if not inner_parser.at_eof():
             self.trace_exit(f"parse_emphasis(marker={marker!r})")
             raise ParseError(f"Could not consume emphasis content for marker {marker!r}")
@@ -320,7 +316,7 @@ class Parser:
         return Emphasis(marker=marker, content=content_para)
 
     def find_closing_marker(self, marker: str) -> int:
-        self.trace_enter(f"find_closing_marker(marker={marker!r})")
+        #self.trace_enter(f"find_closing_marker(marker={marker!r})")
         search_pos = self.pos + len(marker)
         while search_pos < self.length:
             if self.peek_at(search_pos, "\n"):
@@ -333,10 +329,14 @@ class Parser:
     def parse_modifiers(self) -> List[Tuple[str, str]]:
         self.trace_enter("parse_modifiers")
         modifiers: List[Tuple[str, str]] = []
+        self.skip_spaces()
+        if not self.peek(".") and not self.peek(";"):
+            identifier = self.parse_identifier()
+            modifiers.append(("#", identifier))
         while True:
             self.skip_spaces()
-            if self.peek(".") or self.peek("#"):
-                marker = self.text[self.pos]
+            if self.peek("."):
+                marker = self.current_char()
                 self.advance(1)
                 self.skip_spaces()
                 identifier = self.parse_identifier()
@@ -358,55 +358,12 @@ class Parser:
         self.trace_exit("parse_identifier")
         return identifier
 
-    def parse_closing_tag(self, expected_tag: str) -> None:
-        self.trace_enter(f"parse_closing_tag(expected_tag={expected_tag!r})")
-        self.expect("[")
+    def peek_identifier(self) -> bool:
         self.skip_spaces()
-        self.expect("/")
-        self.skip_spaces()
-        closing_tag = self.parse_identifier()
-        self.skip_spaces()
-        self.expect("]")
-        if closing_tag != expected_tag:
-            self.trace_exit(f"parse_closing_tag(expected_tag={expected_tag!r})")
-            raise ParseError(
-                f"Mismatched closing tag at position {self.pos}: expected {expected_tag!r}, found {closing_tag!r}"
-            )
-        self.trace_exit(f"parse_closing_tag(expected_tag={expected_tag!r})")
+        return bool(re.match(r"[A-Za-z_][A-Za-z0-9_-]*", self.remaining()))
 
-    def next_is_closing_block_tag(self) -> bool:
-        if not self.peek("["):
-            return False
-        snapshot = self.pos
-        self.advance(1)
-        self.skip_spaces()
-        is_close = self.peek("/")
-        self.pos = snapshot
-        return is_close
-
-    def peek_block_or_arrow_or_closing(self) -> bool:
-        if self.peek("[/"):
-            return True
-        if self.peek_arrow_block_start():
-            return True
-        if self.peek("["):
-            try:
-                snapshot = self.pos
-                self.advance(1)
-                self.skip_spaces()
-                valid = bool(re.match(r"[A-Za-z_][A-Za-z0-9_-]*", self.remaining()))
-                self.pos = snapshot
-                return valid
-            except Exception:
-                self.pos = snapshot
-                return False
-        return False
-
-    def peek_arrow_block_start(self) -> bool:
-        return self.peek("[") and self.peek_at(self.pos + 1, ">")
-
-    def peek_section_break(self) -> bool:
-        return self.peek("~~~") or self.peek(">>>")
+    def peek_break(self) -> bool:
+        return any(self.peek(break_type * 3) for break_type in self.break_types)
 
     def peek_emphasis_start(self) -> bool:
         for marker in ["***", "**", "*", "_", "~", "$"]:
@@ -428,7 +385,7 @@ class Parser:
     def expect(self, token: str) -> None:
         #print(f"EXPECT: token={token!r} pos={self.pos} next={self.text[self.pos:self.pos+20]!r}")
         if not self.peek(token):
-            raise ParseError(f"Expected {token!r} at position {self.pos}")
+            raise ParseError(f"Expected {token!r} at position {self.pos} but found {self.text[self.pos:self.pos+20]!r}")
         self.advance(len(token))
 
     def peek_at(self, position: int, token: str) -> bool:
@@ -448,10 +405,10 @@ class Parser:
         return self.text[self.pos :]
 
 
-def parse(text: str, trace_enabled: bool = False) -> Block:
+def parse(text: str, trace_enabled: bool = False) -> OutlineBlock:
     normalised = normalise_input(text)
     parser = Parser(normalised, trace_enabled=trace_enabled)
-    return parser.parse_block()
+    return parser.parse_outline_block()
 
 
 def main() -> int:

@@ -1,19 +1,19 @@
 This is a paragraph in chapter 1, section 1.
 This is another paragraph in chapter 1, section 1.
 This is yet another paragraph in chapter 1, section 1.
-~~~
-[center]This is a paragraph in chapter 1, section 2.[/center]
+===
+[.center;This is a paragraph in chapter 1, section 2.]
 This is another paragraph in chapter 1, section 2.
-~~~~~~~~~~~~~~~
+===========
 This is a paragraph in chapter 1, section 3.
 This is another paragraph in chapter 1, section 3.
 
 This is a paragraph in chapter 1, minor section 1.
 This is another paragraph in chapter 1, minor section 1.
 This is yet another paragraph in chapter 1, minor section 1.
->>>
-[center]This is a paragraph in chapter 1, minor  section 2.[/center]
+---
+[.center;This is a paragraph in chapter 1, minor  section 2.]
 This is another paragraph in chapter 1, minor section 2.
->>>>>>>
+-------------
 This is a paragraph in chapter 1, minor section 3.
 This is another paragraph in chapter 1, minor section 3.
