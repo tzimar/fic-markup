@@ -1,6 +1,14 @@
 # FFML
 
-FFML is a simple markup language combining aspects of BBCode and Markdown, designed for writing fanfics in a format that's flexible but that remains 'plain'.
+FFML is a simple markup language combining aspects of BBCode and Markdown, designed for writing fanfics in a format that's flexible but that remains 'plain'. 
+
+* Readable formatting (`*italics*`, `**bold**`, `_underline_`, `~strikethrough~`, `$small caps$`)
+* Styled divs and spans (`[.center; Centered div]`, `<.red; Red span>`)
+* Comments (`{ Annotate your writing however you want! }`)
+* Escaped text (`` You're a `****`. ``)
+* Multiple types of breaks (scene breaks, section breaks, line breaks)
+* Marking of the first paragraph after the start of the document, after a section, or after a block.
+* Support for European em-dash delimited dialogue (`= I hate you = she said hatefully. = I despise you.`)
 
 ## Usage
 
@@ -30,21 +38,31 @@ The configuration file allows the user to customise aspects of the rendering. `c
 
 ```json
 {
-  "section_break_tag": "p",
-  "section_break_class": "section-break",
-  "section_break_text": "✱ ✱ ✱",
-
-  "minor_section_break_tag": "p",
-  "minor_section_break_class": "minor-section-break",
-  "minor_section_break_text": "",
-
+  "breaks": {
+    "=": {
+      "tag": "p",
+      "class": "hard-break",
+      "text": "✱ ✱ ✱"
+    },
+    "-": {
+      "tag": "p",
+      "class": "soft-break"
+    },
+    ">": {
+      "tag": "br"
+    },
+    "<": {
+      
+    }
+  },
   "not_inset_class": "not-inset",
   "small_caps_class": "small-caps",
   "dialog_space_class": "fwsp"
 }
+
 ```
 
 
 ---
 
-More input-output example pairs are provided in the `examples` directory.
+Input-output example pairs are provided in the `examples` directory.
