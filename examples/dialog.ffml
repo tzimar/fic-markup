@@ -10,8 +10,8 @@ Narration. = Dialog. = Narration.
 
 = Dialog. = Narration. = Dialog.
 
-Narration. = Dialog can have *formatting* [span.red]too[/span]. = More narration.
+Narration. = Dialog can have *formatting* <.red; too>. = More narration.
 
-[div.white]
+[.white;
   = Dialogue can appear within blocks. = Narration.
-[/div]
+]
