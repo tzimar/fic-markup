@@ -56,8 +56,7 @@ The configuration file allows the user to customise aspects of the rendering. `c
       
     }
   },
-  "small_caps_class": "small-caps",
-  "dialog_space_class": "fwsp"
+  "small_caps_class": "small-caps"
 }
 
 ```

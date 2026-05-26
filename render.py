@@ -42,7 +42,6 @@ class BreakType:
 class RenderConfig:
     break_types: Dict[str, BreakType] = None
     small_caps_class: str = "small-caps"
-    dialog_space_class: str = "fwsp"
 
     @classmethod
     def from_path(cls, path: Path) -> "RenderConfig":
@@ -65,7 +64,6 @@ class RenderConfig:
                 for k, v in raw.get("breaks", {}).items()
             },
             small_caps_class=raw.get("small_caps_class", cls.small_caps_class),
-            dialog_space_class=raw.get("dialog_space_class", cls.dialog_space_class),
         )
 
     @classmethod
@@ -180,11 +178,11 @@ def render_para_content(para: Paragraph, config: RenderConfig) -> str:
         if isinstance(part, Narration):
             if i > 0:
                 # After dialogue
-                parts.append(f'<span class="{config.dialog_space_class}"> </span>— ')
+                parts.append(f'&#x202F;— ')
             parts.append(render_narration(part, config))
         elif isinstance(part, Dialogue):
             # Before dialogue
-            parts.append(f' —<span class="{config.dialog_space_class}"> </span>')
+            parts.append(f' —&#x202F;')
             parts.append(render_dialogue(part, config))
     return "".join(parts)
 
