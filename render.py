@@ -10,18 +10,93 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 from parse import (
-    OutlineBlock,
-    InlineBlock,
     Body,
+    BodyItem,
+    Break,
     Dialogue,
     Emphasis,
+    InlineBlock,
+    Metadata,
     Narration,
     Node,
+    OutlineBlock,
     Paragraph,
-    Break,
     Text,
     parse,
 )
+
+
+def find_metadata(node: Node) -> list[Metadata]:
+    metadata: list[Metadata] = []
+    if hasattr(node, "metadata"):
+        metadata.extend(getattr(node, "metadata", []))
+
+    if isinstance(node, Paragraph):
+        for part in node.parts:
+            metadata.extend(find_metadata(part))
+    elif isinstance(node, (Narration, Dialogue)):
+        for part in node.items:
+            metadata.extend(find_metadata(part))
+    elif isinstance(node, Emphasis):
+        metadata.extend(find_metadata(node.content))
+    elif isinstance(node, InlineBlock):
+        metadata.extend(find_metadata(node.para))
+
+    return metadata
+
+
+def chapter_name_for_item(item: Node) -> str | None:
+    for metadata in find_metadata(item):
+        if metadata.identifier == "chapter" and metadata.text.strip():
+            return metadata.text.strip()
+    return None
+
+
+def split_chapter_documents(ast: OutlineBlock) -> list[tuple[str | None, list[BodyItem]]]:
+    documents: list[tuple[str | None, list[BodyItem]]] = []
+    pending_items: list[BodyItem] = []
+    current_chapter: str | None = None
+    current_items: list[BodyItem] = []
+
+    for item in ast.body.items:
+        chapter_name = chapter_name_for_item(item)
+        if chapter_name is not None:
+            if current_chapter is None and not documents and pending_items:
+                current_items = pending_items + [item]
+            else:
+                if current_items:
+                    documents.append((current_chapter, current_items))
+                current_items = [item]
+            current_chapter = chapter_name
+        else:
+            if current_chapter is None:
+                pending_items.append(item)
+            else:
+                current_items.append(item)
+
+    if current_chapter is None:
+        if pending_items:
+            documents.append((None, pending_items))
+    else:
+        documents.append((current_chapter, current_items))
+
+    return documents
+
+
+def render_html_documents(ast: OutlineBlock, config: RenderConfig) -> list[tuple[str | None, str]]:
+    document_groups = split_chapter_documents(ast)
+
+    if len(document_groups) == 1 and document_groups[0][0] is None:
+        return [(None, render_html(ast, config))]
+
+    rendered: list[tuple[str | None, str]] = []
+    for chapter_name, items in document_groups:
+        if chapter_name is None:
+            continue
+        chapter_ast = OutlineBlock(modifiers=ast.modifiers, body=Body(items=items), metadata=ast.metadata)
+        rendered.append((chapter_name, render_html(chapter_ast, config)))
+
+    return rendered
 
 
 class RenderContext:
@@ -298,11 +373,10 @@ def main() -> int:
             return 1
 
     ast = parse(source_text)
-    html = render_html(ast, config)
-
-    templated_html = template.replace("{{content}}", html)
+    documents = render_html_documents(ast, config)
 
     output_path = args.output
+    output_dir = None
     if args.output_dir:
         output_dir = Path(args.output_dir)
         if output_path:
@@ -312,14 +386,38 @@ def main() -> int:
             output_filename = source_path.stem + ".html"
             output_path = str(output_dir / output_filename)
 
-    if output_path:
-        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-        Path(output_path).write_text(templated_html, encoding="utf-8")
-    else:
-        try:
-            print(templated_html)
-        except UnicodeEncodeError:
-            sys.stdout.buffer.write(templated_html.encode("utf-8"))
+    if len(documents) > 1 and not output_dir:
+        print(
+            "Error: source contains multiple chapter documents; use --output-dir to write files",
+            file=sys.stderr,
+        )
+        return 1
+
+    if len(documents) == 1:
+        _, html = documents[0]
+        templated_html = template.replace("{{content}}", html)
+        if output_path:
+            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+            Path(output_path).write_text(templated_html, encoding="utf-8")
+        else:
+            try:
+                print(templated_html)
+            except UnicodeEncodeError:
+                sys.stdout.buffer.write(templated_html.encode("utf-8"))
+        return 0
+
+    assert output_dir is not None
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_base = Path(output_path).stem if output_path else (Path(args.source).stem if args.source else "")
+
+    for chapter_name, html in documents:
+        if output_base:
+            output_filename = f"{output_base}-{chapter_name}.html"
+        else:
+            output_filename = f"{chapter_name}.html"
+        chapter_path = output_dir / output_filename
+        templated_html = template.replace("{{content}}", html)
+        chapter_path.write_text(templated_html, encoding="utf-8")
 
     return 0
 

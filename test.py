@@ -85,6 +85,6 @@ make_test("dialog", ["dialog"])
 make_test("empty", ["empty"])
 make_test("inline_formatting", ["inline_formatting"])
 make_test("section_breaks", ["section_breaks"])
-make_test("metadata", ["metadata"])
+make_test("metadata", ["metadata-the-beginning", "metadata-not-the-beginning"])
 
 run_tests()

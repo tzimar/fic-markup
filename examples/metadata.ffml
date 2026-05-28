@@ -2,11 +2,13 @@
 {!author Margo }
 {!date 28/05/2026 }
 
-{!chapter The Beginning }
+{!chapter the-beginning }
 
 This is the beginning.
 
-{!chapter Not the Beginning }
+The beginning was very strange.
+
+{!chapter not-the-beginning }
 The beginning ended very quickly.
 
 {!todo This part still needs to be written. }
