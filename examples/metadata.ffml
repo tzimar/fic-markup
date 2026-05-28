@@ -1,0 +1,20 @@
+{!title My Document }
+{!author Margo }
+{!date 28/05/2026 }
+
+{!chapter The Beginning }
+
+This is the beginning.
+
+{!chapter Not the Beginning }
+The beginning ended very quickly.
+
+{!todo This part still needs to be written. }
+
+{!date 04/06/2026 }
+
+This was written later.
+
+{!end}
+
+Everything here wont be included in the final documents. La la la la la!!! `^_^` You dont even have to worry!!! No one will everrrrr see it.

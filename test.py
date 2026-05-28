@@ -19,7 +19,7 @@ def make_test(input_file: str, expected_output_files: list[str]):
     ))
 
 examples_dir = Path("examples/")
-output_dir = Path("examples/.test/")
+output_dir = Path("examples/test-output/")
 
 output_dir.mkdir(exist_ok=True)
 
@@ -27,7 +27,9 @@ output_dir.mkdir(exist_ok=True)
 def run_test(test: Test) -> bool:
   
     render = subprocess.run(
-        ["python", "render.py", str(examples_dir / (test.input_file + ".ffml")), "-d", str(output_dir)]
+        [sys.executable, "render.py", str(examples_dir / (test.input_file + ".ffml")), "-d", str(output_dir)],
+        capture_output=True,
+        text=True,
     )
     if render.returncode != 0:
         print(f"Error running render.py on {test.input_file}.ffml:\n{render.stderr}")
@@ -39,14 +41,16 @@ def run_test(test: Test) -> bool:
           print(f"Expected output file {expected_output_file}.html does not exist for {test.input_file}.ffml.")
           return False
 
-      diff = subprocess.run(
-          ["diff", str(examples_dir / (expected_output_file + ".html")), str(output_dir / (expected_output_file + ".html"))],
-          capture_output=True,
-          text=True,
-      )
-      if diff.returncode != 0:
+      expected_path = examples_dir / (expected_output_file + ".html")
+      actual_path = output_dir / (expected_output_file + ".html")
+      expected_text = expected_path.read_text(encoding="utf8")
+      actual_text = actual_path.read_text(encoding="utf8")
+      if expected_text != actual_text:
           print(f"Differences found in {expected_output_file}.html:")
-          print(diff.stdout)
+          for i, (e_line, a_line) in enumerate(zip(expected_text.splitlines(), actual_text.splitlines()), start=1):
+              if e_line != a_line:
+                  print(f"Line {i}: expected={e_line!r}, actual={a_line!r}")
+                  break
           return False
       else:
           print(f"No differences found in {expected_output_file}.html.")
@@ -81,5 +85,6 @@ make_test("dialog", ["dialog"])
 make_test("empty", ["empty"])
 make_test("inline_formatting", ["inline_formatting"])
 make_test("section_breaks", ["section_breaks"])
+make_test("metadata", ["metadata"])
 
 run_tests()
