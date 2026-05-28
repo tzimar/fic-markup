@@ -272,6 +272,9 @@ def main() -> int:
         "--output", "-o", help="output file; writes to stdout if omitted"
     )
     parser.add_argument(
+        "--output-dir", "-d", help="directory for output files"
+    )
+    parser.add_argument(
         "--template", "-t", help="HTML template file with {{content}} placeholder"
     )
     parser.add_argument("--config", "-c", help="JSON config file")
@@ -299,8 +302,19 @@ def main() -> int:
 
     templated_html = template.replace("{{content}}", html)
 
-    if args.output:
-        Path(args.output).write_text(templated_html, encoding="utf-8")
+    output_path = args.output
+    if args.output_dir:
+        output_dir = Path(args.output_dir)
+        if output_path:
+            output_path = str(output_dir / Path(output_path).name)
+        elif args.source:
+            source_path = Path(args.source)
+            output_filename = source_path.stem + ".html"
+            output_path = str(output_dir / output_filename)
+
+    if output_path:
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(output_path).write_text(templated_html, encoding="utf-8")
     else:
         try:
             print(templated_html)
