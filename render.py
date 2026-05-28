@@ -5,10 +5,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
-import html
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from parse import (
     OutlineBlock,
@@ -40,7 +39,7 @@ class BreakType:
 
 @dataclass
 class RenderConfig:
-    break_types: Dict[str, BreakType] = None
+    break_types: Dict[str, BreakType] = field(default_factory=dict)
     small_caps_class: str = "small-caps"
 
     @classmethod
@@ -49,10 +48,6 @@ class RenderConfig:
             raise FileNotFoundError(path)
 
         raw = cls._load_config_file(path)
-        if not isinstance(raw, dict):
-            raise ValueError(
-                "Configuration file must contain an object at the top level"
-            )
 
         return cls(
             break_types={
@@ -61,15 +56,20 @@ class RenderConfig:
                     class_attr=v.get("class", None),
                     text=v.get("text", None),
                 )
-                for k, v in raw.get("breaks", {}).items()
+                for k, v in cast(
+                    dict[str, dict[str, str]], raw.get("breaks", {})
+                ).items()
             },
             small_caps_class=raw.get("small_caps_class", cls.small_caps_class),
         )
 
     @classmethod
-    def _load_config_file(cls, path: Path) -> Any:
+    def _load_config_file(cls, path: Path) -> dict[str, Any]:
         text = path.read_text(encoding="utf-8")
-        return json.loads(text)
+        data = json.loads(text)
+        if isinstance(data, dict):
+            return cast(dict[str, Any], data)
+        raise ValueError("Configuration file must contain an object at the top level")
 
 
 def load_config(path: Optional[Path] = None) -> RenderConfig:
@@ -121,7 +121,7 @@ def render_body(
     lines: List[str] = []
     is_first_item = is_first_in_parent
 
-    for i, item in enumerate(body.items):
+    for item in body.items:
         if isinstance(item, Paragraph):
             html = render_paragraph(item, is_first_item, None, config)
             if html:
@@ -178,11 +178,11 @@ def render_para_content(para: Paragraph, config: RenderConfig) -> str:
         if isinstance(part, Narration):
             if i > 0:
                 # After dialogue
-                parts.append(f'&#x202F;— ')
+                parts.append(f"&#x202F;— ")
             parts.append(render_narration(part, config))
         elif isinstance(part, Dialogue):
             # Before dialogue
-            parts.append(f' —&#x202F;')
+            parts.append(f" —&#x202F;")
             parts.append(render_dialogue(part, config))
     return "".join(parts)
 

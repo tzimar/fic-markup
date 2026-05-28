@@ -104,7 +104,7 @@ class Text(Node):
     content: str
 
 
-BodyItem = Union[Paragraph, Break]
+BodyItem = Union[OutlineBlock, Paragraph, Break]
 
 
 def ast_to_dict(node):
@@ -280,6 +280,8 @@ class Parser:
         if self.peek(";"):
             self.expect(";")
             body = self.parse_body()
+        else:
+            body = Body(items=[])
         self.skip_spaces()
         self.expect("]")
         self.trace_exit("parse_outline_block")
@@ -295,6 +297,8 @@ class Parser:
             self.expect(";")
             self.skip_spaces()
             para = self.parse_paragraph()
+        else:
+            para = Paragraph(parts=[])
         self.skip_spaces()
         self.expect(">")
         self.trace_exit("parse_inline_block")
