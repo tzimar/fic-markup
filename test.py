@@ -27,7 +27,7 @@ output_dir.mkdir(exist_ok=True)
 def run_test(test: Test) -> bool:
   
     render = subprocess.run(
-        [sys.executable, "render.py", str(examples_dir / (test.input_file + ".ffml")), "-d", str(output_dir)],
+        [sys.executable, "render.py", str(examples_dir / (test.input_file + ".ffml")), "-d", str(output_dir), "--suppress-todos"],
         capture_output=True,
         text=True,
     )

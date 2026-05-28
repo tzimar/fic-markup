@@ -351,6 +351,39 @@ def render_attributes(modifiers: List[Tuple[str, str]]) -> str:
     return f" {' '.join(attrs)}" if attrs else ""
 
 
+def extract_todos(source_text: str) -> list[tuple[int, str]]:
+    import re
+
+    todos: list[tuple[int, str]] = []
+    for line_num, line in enumerate(source_text.split("\n"), start=1):
+        match = re.search(r"\{\!todo\s+([^}]+)\}", line)
+        if match:
+            todo_text = match.group(1).strip()
+            todos.append((line_num, todo_text))
+    return todos
+
+
+def print_todos(source_text: str, source_name: str, context_lines: int = 1) -> None:
+    todos = extract_todos(source_text)
+    if not todos:
+        return
+
+    lines = source_text.split("\n")
+    for line_num, todo_text in todos:
+        print(f"{source_name}:{line_num}: todo", file=sys.stderr)
+        for i in range(context_lines, 0, -1):
+            before_line_num = line_num - i
+            if before_line_num > 0:
+                print(f"  {before_line_num} | {lines[before_line_num - 1]}", file=sys.stderr)
+        print(f"  {line_num} | {lines[line_num - 1]}", file=sys.stderr)
+        for i in range(1, context_lines + 1):
+            after_line_num = line_num + i
+            if after_line_num <= len(lines):
+                print(f"  {after_line_num} | {lines[after_line_num - 1]}", file=sys.stderr)
+        print(f"         {todo_text}", file=sys.stderr)
+        print(file=sys.stderr)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Render an AST to HTML")
     parser.add_argument(
@@ -366,12 +399,20 @@ def main() -> int:
         "--template", "-t", help="HTML template file with {{content}} placeholder"
     )
     parser.add_argument("--config", "-c", help="JSON config file")
+    parser.add_argument(
+        "--suppress-todos",
+        action="store_true",
+        help="suppress todos",
+    )
     args = parser.parse_args()
 
     if args.source:
         source_text = Path(args.source).read_text(encoding="utf-8")
     else:
         source_text = sys.stdin.read()
+
+    if not args.suppress_todos and args.source:
+        print_todos(source_text, args.source, 2)
 
     config = load_config(Path(args.config)) if args.config else load_config()
 
