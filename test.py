@@ -47,9 +47,14 @@ def run_test(test: Test) -> bool:
       actual_text = actual_path.read_text(encoding="utf8")
       if expected_text != actual_text:
           print(f"Differences found in {expected_output_file}.html:")
-          for i, (e_line, a_line) in enumerate(zip(expected_text.splitlines(), actual_text.splitlines()), start=1):
+          e_lines = expected_text.splitlines()
+          a_lines = actual_text.splitlines()
+          lc = max(len(e_lines), len(a_lines))
+          e_lines += [""] * (lc - len(e_lines))
+          a_lines += [""] * (lc - len(a_lines))
+          for i, (e_line, a_line) in enumerate(zip(e_lines, a_lines), start=1):
               if e_line != a_line:
-                  print(f"Line {i}: expected={e_line!r}, actual={a_line!r}")
+                  print(f"  -{e_line}\n  +{a_line}")
                   break
           return False
       else:

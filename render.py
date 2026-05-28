@@ -52,6 +52,13 @@ def chapter_name_for_item(item: Node) -> str | None:
     return None
 
 
+def has_end_marker(item: Node) -> bool:
+    for metadata in find_metadata(item):
+        if metadata.identifier == "end":
+            return True
+    return False
+
+
 def split_chapter_documents(ast: OutlineBlock) -> list[tuple[str | None, list[BodyItem]]]:
     documents: list[tuple[str | None, list[BodyItem]]] = []
     pending_items: list[BodyItem] = []
@@ -68,6 +75,12 @@ def split_chapter_documents(ast: OutlineBlock) -> list[tuple[str | None, list[Bo
                     documents.append((current_chapter, current_items))
                 current_items = [item]
             current_chapter = chapter_name
+        elif has_end_marker(item):
+            # End marker stops the current chapter; don't include this item
+            if current_items:
+                documents.append((current_chapter, current_items))
+            current_items = []
+            current_chapter = None
         else:
             if current_chapter is None:
                 pending_items.append(item)
