@@ -79,7 +79,7 @@ def run_tests():
         sys
     else:
         print(
-            f"{sum(successes)}/{len(successes)} tests failed."
+            f"{len(successes) - sum(successes)}/{len(successes)} tests failed."
         )
         sys.exit(1)
 

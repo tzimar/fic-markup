@@ -175,8 +175,8 @@ class Parser:
                 self.advance(1)
                 continue
             start_snapshot = self.pos
-            metadata = self.parse_metadata_items()
-            self.skip_spaces()
+            metadata = self.parse_metadata_items(skip_newlines=True)
+            self.skip_whitespace()
             if self.peek_break():
                 item = self.parse_break()
                 if metadata:
