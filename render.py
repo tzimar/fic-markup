@@ -169,7 +169,7 @@ def render_paragraph(
         modifiers.extend(extra_modifiers)
 
     attrs = render_attributes(modifiers)
-    return f"{'<br />' if is_first else ''}<p{attrs}>{content}</p>"
+    return f"{'<br>' if is_first else ''}<p{attrs}>{content}</p>"
 
 
 def render_para_content(para: Paragraph, config: RenderConfig) -> str:
