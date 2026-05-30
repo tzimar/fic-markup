@@ -475,7 +475,7 @@ class Parser:
     def parse_identifier(self) -> str:
         self.trace_enter("parse_identifier")
         self.skip_spaces()
-        match = re.match(r"[A-Za-z_][A-Za-z0-9_-]*", self.remaining())
+        match = re.match(r"[A-Za-z0-9_-]+", self.remaining())
         if not match:
             self.trace_exit("parse_identifier")
             raise ParseError(f"Expected identifier at position {self.pos}")
@@ -486,7 +486,7 @@ class Parser:
 
     def peek_identifier(self) -> bool:
         self.skip_spaces()
-        return bool(re.match(r"[A-Za-z_][A-Za-z0-9_-]*", self.remaining()))
+        return bool(re.match(r"[A-Za-z0-9_-]+", self.remaining()))
 
     def peek_break(self) -> bool:
         return any(self.peek(break_type * 3) for break_type in self.break_types)
