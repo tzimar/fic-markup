@@ -200,16 +200,22 @@ class Parser:
     def parse_paragraph(self) -> Paragraph:
         self.trace_enter("parse_paragraph")
         parts: List[Node] = []
-        narration = self.parse_narration_or_dialog(boundary="=")
+        narration = self.parse_narration_or_dialog(boundary="=", allow_metadata_newlines=True)
         parts.append(Narration(items=narration))
         while self.peek("="):
             self.advance(1)
-            dialogue = self.parse_narration_or_dialog(boundary="=")
-            parts.append(Dialogue(items=dialogue))
+            dialogue = self.parse_narration_or_dialog(
+                boundary="=", allow_metadata_newlines=False
+            )
+            if dialogue:
+                parts.append(Dialogue(items=dialogue))
             if self.peek("="):
                 self.advance(1)
-                narration = self.parse_narration_or_dialog(boundary="=")
-                parts.append(Narration(items=narration))
+                narration = self.parse_narration_or_dialog(
+                    boundary="=", allow_metadata_newlines=False
+                )
+                if narration:
+                    parts.append(Narration(items=narration))
             else:
                 break
         self.trace_exit("parse_paragraph")
@@ -217,7 +223,9 @@ class Parser:
         self.trace_emit(para)
         return para
 
-    def parse_narration_or_dialog(self, boundary: str) -> List[Node]:
+    def parse_narration_or_dialog(
+        self, boundary: str, allow_metadata_newlines: bool = True
+    ) -> List[Node]:
         self.trace_enter("parse_narration_or_dialog")
         items: List[Node] = []
         while True:
@@ -231,7 +239,9 @@ class Parser:
                 break
             metadata: List[Metadata] = []
             if self.peek_metadata_start():
-                metadata = self.parse_metadata_items(skip_newlines=True)
+                metadata = self.parse_metadata_items(
+                    skip_newlines=allow_metadata_newlines
+                )
             if (
                 self.at_eof()
                 or self.peek("\n")
@@ -240,6 +250,8 @@ class Parser:
                 or self.peek("]")
             ):
                 if metadata:
+                    if not allow_metadata_newlines:
+                        return []
                     raise ParseError(
                         f"Metadata not followed by text or paragraph item at position {self.pos}"
                     )
