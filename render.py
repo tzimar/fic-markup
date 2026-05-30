@@ -59,6 +59,19 @@ def has_end_marker(item: Node) -> bool:
     return False
 
 
+def get_template_path(ast: OutlineBlock) -> str | None:
+    for metadata in ast.metadata:
+        if metadata.identifier == "template" and metadata.text.strip():
+            return metadata.text.strip()
+
+    for item in ast.body.items:
+        for metadata in find_metadata(item):
+            if metadata.identifier == "template" and metadata.text.strip():
+                return metadata.text.strip()
+
+    return None
+
+
 def split_chapter_documents(ast: OutlineBlock) -> list[tuple[str | None, list[BodyItem]]]:
     documents: list[tuple[str | None, list[BodyItem]]] = []
     pending_items: list[BodyItem] = []
@@ -416,8 +429,26 @@ def main() -> int:
 
     config = load_config(Path(args.config)) if args.config else load_config()
 
+    ast = parse(source_text)
+
     template = "{{content}}"
-    if args.template:
+    template_path = get_template_path(ast)
+    if template_path:
+        try:
+            template = Path(template_path).read_text(encoding="utf8")
+            if "{{content}}" not in template:
+                print(
+                    f"Error: Template file {template_path} must contain {{{{content}}}} placeholder",
+                    file=sys.stderr,
+                )
+                return 1
+        except FileNotFoundError:
+            print(
+                f"Error: Template file {template_path} not found",
+                file=sys.stderr,
+            )
+            return 1
+    elif args.template:
         template = Path(args.template).read_text(encoding="utf8")
         if "{{content}}" not in template:
             print(
@@ -426,7 +457,6 @@ def main() -> int:
             )
             return 1
 
-    ast = parse(source_text)
     documents = render_html_documents(ast, config)
 
     output_path = args.output
