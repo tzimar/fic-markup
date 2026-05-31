@@ -15,3 +15,7 @@ Narration. = Dialog can have *formatting* <.red; too>. = More narration.
 [.white;
   = Dialogue can appear within blocks. = Narration.
 ]
+
+{missing dialogue}
+Narration. =
+Next line.

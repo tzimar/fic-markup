@@ -1,3 +1,5 @@
+metadata = { "{!", identifier, text, "}" } ;
+
 identifier = ? html tag name or css class name ? ; 
 
 text = { ? any character ? } ;
@@ -12,8 +14,8 @@ body = [ body-item , { "\n" , body-item } ] ;
 
 body-item = 
          para
-       | outline-block  
-       | section-break 
+       | metadata, outline-block
+       | metadata, section-break
        ;
 
 section-break =
@@ -24,12 +26,15 @@ section-break =
        ;
 
 para = narration , [ "=" , dialog , { "=" , narration } ] ;
-dialog = { text | para-item } ;
-narration = { text | para-item } ;
+dialog = { metadata, text | para-item } ;
+narration = { metadata, text | para-item } ;
 
 para-item = 
-         inline-block
-       | "***" , para, "***"
+         metadata, inline-block
+       | metadata, emphasis ;
+
+emphasis =
+         "***" , para, "***"
        | "**" , para, "**"
        | "*" , para, "*"
        | "_" , para, "_"

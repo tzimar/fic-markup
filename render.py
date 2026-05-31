@@ -10,18 +10,119 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 from parse import (
-    OutlineBlock,
-    InlineBlock,
     Body,
+    BodyItem,
+    Break,
     Dialogue,
     Emphasis,
+    InlineBlock,
+    Metadata,
     Narration,
     Node,
+    OutlineBlock,
     Paragraph,
-    Break,
     Text,
     parse,
 )
+
+
+def find_metadata(node: Node) -> list[Metadata]:
+    metadata: list[Metadata] = []
+    if hasattr(node, "metadata"):
+        metadata.extend(getattr(node, "metadata", []))
+
+    if isinstance(node, Paragraph):
+        for part in node.parts:
+            metadata.extend(find_metadata(part))
+    elif isinstance(node, (Narration, Dialogue)):
+        for part in node.items:
+            metadata.extend(find_metadata(part))
+    elif isinstance(node, Emphasis):
+        metadata.extend(find_metadata(node.content))
+    elif isinstance(node, InlineBlock):
+        metadata.extend(find_metadata(node.para))
+
+    return metadata
+
+
+def chapter_name_for_item(item: Node) -> str | None:
+    for metadata in find_metadata(item):
+        if metadata.identifier == "chapter" and metadata.text.strip():
+            return metadata.text.strip()
+    return None
+
+
+def has_end_marker(item: Node) -> bool:
+    for metadata in find_metadata(item):
+        if metadata.identifier == "end":
+            return True
+    return False
+
+
+def get_template_path(ast: OutlineBlock) -> str | None:
+    for metadata in ast.metadata:
+        if metadata.identifier == "template" and metadata.text.strip():
+            return metadata.text.strip()
+
+    for item in ast.body.items:
+        for metadata in find_metadata(item):
+            if metadata.identifier == "template" and metadata.text.strip():
+                return metadata.text.strip()
+
+    return None
+
+
+def split_chapter_documents(ast: OutlineBlock) -> list[tuple[str | None, list[BodyItem]]]:
+    documents: list[tuple[str | None, list[BodyItem]]] = []
+    pending_items: list[BodyItem] = []
+    current_chapter: str | None = None
+    current_items: list[BodyItem] = []
+
+    for item in ast.body.items:
+        chapter_name = chapter_name_for_item(item)
+        if chapter_name is not None:
+            if current_chapter is None and not documents and pending_items:
+                current_items = pending_items + [item]
+            else:
+                if current_items:
+                    documents.append((current_chapter, current_items))
+                current_items = [item]
+            current_chapter = chapter_name
+        elif has_end_marker(item):
+            # End marker stops the current chapter; don't include this item
+            if current_items:
+                documents.append((current_chapter, current_items))
+            current_items = []
+            current_chapter = None
+        else:
+            if current_chapter is None:
+                pending_items.append(item)
+            else:
+                current_items.append(item)
+
+    if current_chapter is None:
+        if pending_items:
+            documents.append((None, pending_items))
+    else:
+        documents.append((current_chapter, current_items))
+
+    return documents
+
+
+def render_html_documents(ast: OutlineBlock, config: RenderConfig) -> list[tuple[str | None, str]]:
+    document_groups = split_chapter_documents(ast)
+
+    if len(document_groups) == 1 and document_groups[0][0] is None:
+        return [(None, render_html(ast, config))]
+
+    rendered: list[tuple[str | None, str]] = []
+    for chapter_name, items in document_groups:
+        if chapter_name is None:
+            continue
+        chapter_ast = OutlineBlock(modifiers=ast.modifiers, body=Body(items=items), metadata=ast.metadata)
+        rendered.append((chapter_name, render_html(chapter_ast, config)))
+
+    return rendered
 
 
 class RenderContext:
@@ -263,6 +364,39 @@ def render_attributes(modifiers: List[Tuple[str, str]]) -> str:
     return f" {' '.join(attrs)}" if attrs else ""
 
 
+def extract_todos(source_text: str) -> list[tuple[int, str]]:
+    import re
+
+    todos: list[tuple[int, str]] = []
+    for line_num, line in enumerate(source_text.split("\n"), start=1):
+        match = re.search(r"\{\!todo\s+([^}]+)\}", line)
+        if match:
+            todo_text = match.group(1).strip()
+            todos.append((line_num, todo_text))
+    return todos
+
+
+def print_todos(source_text: str, source_name: str, context_lines: int = 1) -> None:
+    todos = extract_todos(source_text)
+    if not todos:
+        return
+
+    lines = source_text.split("\n")
+    for line_num, todo_text in todos:
+        print(f"{source_name}:{line_num}: todo", file=sys.stderr)
+        for i in range(context_lines, 0, -1):
+            before_line_num = line_num - i
+            if before_line_num > 0:
+                print(f"  {before_line_num} | {lines[before_line_num - 1]}", file=sys.stderr)
+        print(f"  {line_num} | {lines[line_num - 1]}", file=sys.stderr)
+        for i in range(1, context_lines + 1):
+            after_line_num = line_num + i
+            if after_line_num <= len(lines):
+                print(f"  {after_line_num} | {lines[after_line_num - 1]}", file=sys.stderr)
+        print(f"         {todo_text}", file=sys.stderr)
+        print(file=sys.stderr)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Render an AST to HTML")
     parser.add_argument(
@@ -272,9 +406,17 @@ def main() -> int:
         "--output", "-o", help="output file; writes to stdout if omitted"
     )
     parser.add_argument(
+        "--output-dir", "-d", help="directory for output files"
+    )
+    parser.add_argument(
         "--template", "-t", help="HTML template file with {{content}} placeholder"
     )
     parser.add_argument("--config", "-c", help="JSON config file")
+    parser.add_argument(
+        "--suppress-todos",
+        action="store_true",
+        help="suppress todos",
+    )
     args = parser.parse_args()
 
     if args.source:
@@ -282,10 +424,31 @@ def main() -> int:
     else:
         source_text = sys.stdin.read()
 
+    if not args.suppress_todos and args.source:
+        print_todos(source_text, args.source, 2)
+
     config = load_config(Path(args.config)) if args.config else load_config()
 
+    ast = parse(source_text)
+
     template = "{{content}}"
-    if args.template:
+    template_path = get_template_path(ast)
+    if template_path:
+        try:
+            template = Path(template_path).read_text(encoding="utf8")
+            if "{{content}}" not in template:
+                print(
+                    f"Error: Template file {template_path} must contain {{{{content}}}} placeholder",
+                    file=sys.stderr,
+                )
+                return 1
+        except FileNotFoundError:
+            print(
+                f"Error: Template file {template_path} not found",
+                file=sys.stderr,
+            )
+            return 1
+    elif args.template:
         template = Path(args.template).read_text(encoding="utf8")
         if "{{content}}" not in template:
             print(
@@ -294,18 +457,51 @@ def main() -> int:
             )
             return 1
 
-    ast = parse(source_text)
-    html = render_html(ast, config)
+    documents = render_html_documents(ast, config)
 
-    templated_html = template.replace("{{content}}", html)
+    output_path = args.output
+    output_dir = None
+    if args.output_dir:
+        output_dir = Path(args.output_dir)
+        if output_path:
+            output_path = str(output_dir / Path(output_path).name)
+        elif args.source:
+            source_path = Path(args.source)
+            output_filename = source_path.stem + ".html"
+            output_path = str(output_dir / output_filename)
 
-    if args.output:
-        Path(args.output).write_text(templated_html, encoding="utf-8")
-    else:
-        try:
-            print(templated_html)
-        except UnicodeEncodeError:
-            sys.stdout.buffer.write(templated_html.encode("utf-8"))
+    if len(documents) > 1 and not output_dir:
+        print(
+            "Error: source contains multiple chapter documents; use --output-dir to write files",
+            file=sys.stderr,
+        )
+        return 1
+
+    if len(documents) == 1:
+        _, html = documents[0]
+        templated_html = template.replace("{{content}}", html)
+        if output_path:
+            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+            Path(output_path).write_text(templated_html, encoding="utf-8")
+        else:
+            try:
+                print(templated_html)
+            except UnicodeEncodeError:
+                sys.stdout.buffer.write(templated_html.encode("utf-8"))
+        return 0
+
+    assert output_dir is not None
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_base = Path(output_path).stem if output_path else (Path(args.source).stem if args.source else "")
+
+    for chapter_name, html in documents:
+        if output_base:
+            output_filename = f"{output_base}-{chapter_name}.html"
+        else:
+            output_filename = f"{chapter_name}.html"
+        chapter_path = output_dir / output_filename
+        templated_html = template.replace("{{content}}", html)
+        chapter_path.write_text(templated_html, encoding="utf-8")
 
     return 0
 

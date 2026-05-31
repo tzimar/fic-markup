@@ -7,7 +7,7 @@ import json
 import re
 import sys
 import html
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
 
@@ -19,7 +19,7 @@ class ParseError(Exception):
 def normalise_input(text: str) -> str:
 
     subs = [
-        (r"\{[\s\S]*?\}", r""),
+        (r"\{(?!\!)[\s\S]*?\}", r""),
         (r"\n+", r"\n"),
         (r"[ \t]+", r" "),
     ]
@@ -56,6 +56,12 @@ class Node:
 
 
 @dataclass
+class Metadata(Node):
+    identifier: str
+    text: str
+
+
+@dataclass
 class Body(Node):
     items: List["BodyItem"]
 
@@ -69,24 +75,28 @@ class Paragraph(Node):
 class Break(Node):
     marker: str
     count: int
+    metadata: List[Metadata] = field(default_factory=list)
 
 
 @dataclass
 class OutlineBlock(Node):
     modifiers: List[Tuple[str, str]]
     body: Body
+    metadata: List[Metadata] = field(default_factory=list)
 
 
 @dataclass
 class InlineBlock(Node):
     modifiers: List[Tuple[str, str]]
     para: Paragraph
+    metadata: List[Metadata] = field(default_factory=list)
 
 
 @dataclass
 class Emphasis(Node):
     marker: str
     content: Paragraph
+    metadata: List[Metadata] = field(default_factory=list)
 
 
 @dataclass
@@ -102,6 +112,7 @@ class Dialogue(Node):
 @dataclass
 class Text(Node):
     content: str
+    metadata: List[Metadata] = field(default_factory=list)
 
 
 BodyItem = Union[OutlineBlock, Paragraph, Break]
@@ -163,11 +174,22 @@ class Parser:
             if self.peek("\n"):
                 self.advance(1)
                 continue
+            start_snapshot = self.pos
+            metadata = self.parse_metadata_items(skip_newlines=True)
+            self.skip_whitespace()
             if self.peek_break():
-                items.append(self.parse_break())
+                item = self.parse_break()
+                if metadata:
+                    item.metadata = metadata
+                items.append(item)
             elif self.peek("["):
-                items.append(self.parse_outline_block())
+                item = self.parse_outline_block()
+                if metadata:
+                    item.metadata = metadata
+                items.append(item)
             else:
+                if metadata:
+                    self.pos = start_snapshot
                 items.append(self.parse_paragraph())
             self.skip_spaces()
             if self.peek("\n"):
@@ -178,16 +200,22 @@ class Parser:
     def parse_paragraph(self) -> Paragraph:
         self.trace_enter("parse_paragraph")
         parts: List[Node] = []
-        narration = self.parse_narration_or_dialog(boundary="=")
+        narration = self.parse_narration_or_dialog(boundary="=", allow_metadata_newlines=True)
         parts.append(Narration(items=narration))
         while self.peek("="):
             self.advance(1)
-            dialogue = self.parse_narration_or_dialog(boundary="=")
-            parts.append(Dialogue(items=dialogue))
+            dialogue = self.parse_narration_or_dialog(
+                boundary="=", allow_metadata_newlines=False
+            )
+            if dialogue:
+                parts.append(Dialogue(items=dialogue))
             if self.peek("="):
                 self.advance(1)
-                narration = self.parse_narration_or_dialog(boundary="=")
-                parts.append(Narration(items=narration))
+                narration = self.parse_narration_or_dialog(
+                    boundary="=", allow_metadata_newlines=False
+                )
+                if narration:
+                    parts.append(Narration(items=narration))
             else:
                 break
         self.trace_exit("parse_paragraph")
@@ -195,7 +223,9 @@ class Parser:
         self.trace_emit(para)
         return para
 
-    def parse_narration_or_dialog(self, boundary: str) -> List[Node]:
+    def parse_narration_or_dialog(
+        self, boundary: str, allow_metadata_newlines: bool = True
+    ) -> List[Node]:
         self.trace_enter("parse_narration_or_dialog")
         items: List[Node] = []
         while True:
@@ -207,18 +237,43 @@ class Parser:
                 or self.peek("]")
             ):
                 break
-            node = self.try_parse_paragraph_item()
+            metadata: List[Metadata] = []
+            if self.peek_metadata_start():
+                metadata = self.parse_metadata_items(
+                    skip_newlines=allow_metadata_newlines
+                )
+            if (
+                self.at_eof()
+                or self.peek("\n")
+                or self.peek(boundary)
+                or self.peek(">")
+                or self.peek("]")
+            ):
+                if metadata:
+                    if not allow_metadata_newlines:
+                        return []
+                    raise ParseError(
+                        f"Metadata not followed by text or paragraph item at position {self.pos}"
+                    )
+                break
+            node = self.try_parse_paragraph_item(metadata)
             if node is not None:
                 items.append(node)
                 continue
-            text_node = self.parse_text(boundary)
+            text_node = self.parse_text(boundary, metadata)
             if not text_node is None:
                 items.append(text_node)
+                continue
+            if metadata:
+                raise ParseError(
+                    f"Metadata not followed by text or paragraph item at position {self.pos}"
+                )
+            break
 
         self.trace_exit("parse_narration_or_dialog")
         return items
 
-    def parse_text(self, boundary: str) -> Optional[Text]:
+    def parse_text(self, boundary: str, metadata: Optional[List[Metadata]] = None) -> Optional[Text]:
         self.trace_enter("parse_text")
         start = self.pos
         in_escaped_text = False
@@ -246,18 +301,61 @@ class Parser:
             self.trace_exit("parse_text")
             return None
         self.trace_exit("parse_text")
-        return Text(content=normalise_text(self.text[start : self.pos]))
+        return Text(content=normalise_text(self.text[start : self.pos]), metadata=metadata or [])
 
-    def try_parse_paragraph_item(self) -> Optional[Node]:
+    def parse_metadata_item(self) -> Metadata:
+        self.trace_enter("parse_metadata_item")
+        self.expect("{!")
+        identifier = self.parse_identifier()
+        start = self.pos
+        while not self.at_eof() and not self.peek("}"):
+            self.advance(1)
+        if self.at_eof():
+            raise ParseError(
+                f"Unterminated metadata at position {self.pos}"
+            )
+        metadata_text = self.text[start : self.pos].strip()
+        self.expect("}")
+        self.trace_exit("parse_metadata_item")
+        return Metadata(identifier=identifier, text=metadata_text)
+
+    def parse_metadata_items(self, skip_newlines: bool = False) -> List[Metadata]:
+        self.trace_enter("parse_metadata_items")
+        metadata_items: List[Metadata] = []
+        while True:
+            if skip_newlines:
+                self.skip_whitespace()
+            else:
+                self.skip_spaces()
+            if self.peek("{!"):
+                metadata_items.append(self.parse_metadata_item())
+                continue
+            break
+        self.trace_exit("parse_metadata_items")
+        return metadata_items
+
+    def peek_metadata_start(self) -> bool:
+        snapshot = self.pos
+        self.skip_spaces()
+        result = self.peek("{!")
+        self.pos = snapshot
+        return result
+
+    def try_parse_paragraph_item(self, metadata: Optional[List[Metadata]] = None) -> Optional[Node]:
         self.trace_enter("try_parse_paragraph_item")
         snapshot = self.pos
         try:
             if self.peek("<"):
-                return self.parse_inline_block()
+                node = self.parse_inline_block()
+                if metadata:
+                    node.metadata = metadata
+                return node
             for marker in ["***", "**", "*", "_", "~", "$"]:
                 if self.peek(marker):
                     emphasis = self.parse_emphasis(marker)
                     if emphasis is not None:
+                        if metadata:
+                            emphasis.metadata = metadata
                         self.trace_exit("try_parse_paragraph_item")
                         return emphasis
                     break
@@ -377,7 +475,7 @@ class Parser:
     def parse_identifier(self) -> str:
         self.trace_enter("parse_identifier")
         self.skip_spaces()
-        match = re.match(r"[A-Za-z_][A-Za-z0-9_-]*", self.remaining())
+        match = re.match(r"[A-Za-z0-9_-]+", self.remaining())
         if not match:
             self.trace_exit("parse_identifier")
             raise ParseError(f"Expected identifier at position {self.pos}")
@@ -388,7 +486,7 @@ class Parser:
 
     def peek_identifier(self) -> bool:
         self.skip_spaces()
-        return bool(re.match(r"[A-Za-z_][A-Za-z0-9_-]*", self.remaining()))
+        return bool(re.match(r"[A-Za-z0-9_-]+", self.remaining()))
 
     def peek_break(self) -> bool:
         return any(self.peek(break_type * 3) for break_type in self.break_types)
@@ -404,6 +502,10 @@ class Parser:
 
     def skip_spaces(self) -> None:
         while (not self.at_eof()) and (self.current_char() in " \t"):
+            self.advance(1)
+
+    def skip_whitespace(self) -> None:
+        while (not self.at_eof()) and (self.current_char() in " \t\n"):
             self.advance(1)
 
     def peek(self, token: str) -> bool:
@@ -438,7 +540,11 @@ class Parser:
 def parse(text: str, trace_enabled: bool = False) -> OutlineBlock:
     normalised = normalise_input(text)
     parser = Parser(normalised, trace_enabled=trace_enabled)
-    return parser.parse_outline_block()
+    metadata = parser.parse_metadata_items()
+    ast = parser.parse_outline_block()
+    if metadata:
+        ast.metadata = metadata
+    return ast
 
 
 def main() -> int:

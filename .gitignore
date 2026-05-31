@@ -1,5 +1,3 @@
 __pycache__
-examples/*.test.html
-examples/*.expected.html
-examples/*.actual.html
+examples/test-output
 *.test.html
