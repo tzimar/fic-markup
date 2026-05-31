@@ -13,7 +13,88 @@ from typing import List, Optional, Tuple, Union
 
 
 class ParseError(Exception):
-    pass
+    def __init__(self, message: str, text: Optional[str] = None, pos: Optional[int] = None) -> None:
+        self.message = message
+        self.text = text
+        self.pos = pos
+        super().__init__(self._format_error())
+
+    def _format_error(self) -> str:
+        """Format error message with source context."""
+        if self.text is None or self.pos is None:
+            return self.message
+        
+        lines = self.text.split('\n')
+        line_start = 0
+        line_num = 1
+        
+        for i, line in enumerate(lines, 1):
+            line_end = line_start + len(line)
+            if self.pos <= line_end:
+                line_num = i
+                col_num = self.pos - line_start
+                break
+            line_start = line_end + 1
+
+        context_start = max(0, line_num - 3)
+        context_end = min(len(lines), line_num + 2)
+        context_lines = lines[context_start:context_end]
+        
+        formatted_lines = [self.message]
+        formatted_lines.append("")
+        
+        max_line_num = context_start + len(context_lines)
+        line_num_width = len(str(max_line_num))
+        
+        wrap_width = 80
+        
+        for i, line in enumerate(context_lines, context_start + 1):
+            line_marker = ">" if i == line_num else " "
+            
+            # Wrap long lines
+            if len(line) > wrap_width:
+                chunks = []
+                for j in range(0, len(line), wrap_width):
+                    chunks.append(line[j:j+wrap_width])
+                
+                error_chunk_idx = -1
+                error_chunk_col = -1
+                if i == line_num:
+                    pos_in_line = 0
+                    for chunk_idx, chunk in enumerate(chunks):
+                        if col_num < pos_in_line + len(chunk):
+                            error_chunk_idx = chunk_idx
+                            error_chunk_col = col_num - pos_in_line
+                            break
+                        pos_in_line += len(chunk)
+                
+                formatted_lines.append(
+                    f"{line_marker} {i:{line_num_width}} | {chunks[0]}"
+                )
+                
+                if i == line_num and error_chunk_idx == 0:
+                    pointer_pos = col_num + line_num_width + 5
+                    formatted_lines.append(" " * pointer_pos + "^")
+                
+                for chunk_idx, chunk in enumerate(chunks[1:], 1):
+                    is_error_chunk = (i == line_num and chunk_idx == error_chunk_idx)
+                    formatted_lines.append(
+                        f"  {' ' * line_num_width} | {chunk}"
+                    )
+                    
+                    if is_error_chunk:
+                        pointer_pos = error_chunk_col + line_num_width + 5
+                        formatted_lines.append(" " * pointer_pos + "^")
+            else:
+                # No wrapping
+                formatted_lines.append(
+                    f"{line_marker} {i:{line_num_width}} | {line}"
+                )
+                if i == line_num:
+                    pointer_pos = col_num + line_num_width + 5
+                    formatted_lines.append(" " * pointer_pos + "^")
+        
+        return "\n".join(formatted_lines)
 
 
 def normalise_input(text: str) -> str:
@@ -253,7 +334,9 @@ class Parser:
                     if not allow_metadata_newlines:
                         return []
                     raise ParseError(
-                        f"Metadata not followed by text or paragraph item at position {self.pos}"
+                        f"Metadata not followed by text or paragraph item at position {self.pos}",
+                        text=self.text,
+                        pos=self.pos
                     )
                 break
             node = self.try_parse_paragraph_item(metadata)
@@ -266,7 +349,9 @@ class Parser:
                 continue
             if metadata:
                 raise ParseError(
-                    f"Metadata not followed by text or paragraph item at position {self.pos}"
+                    f"Metadata not followed by text or paragraph item at position {self.pos}",
+                    text=self.text,
+                    pos=self.pos
                 )
             break
 
@@ -312,7 +397,9 @@ class Parser:
             self.advance(1)
         if self.at_eof():
             raise ParseError(
-                f"Unterminated metadata at position {self.pos}"
+                f"Unterminated metadata at position {self.pos}",
+                text=self.text,
+                pos=self.pos
             )
         metadata_text = self.text[start : self.pos].strip()
         self.expect("}")
@@ -415,7 +502,11 @@ class Parser:
                 return Break(marker=break_type, count=count)
 
         self.trace_exit("parse_break")
-        raise ParseError(f"Expected break at position {self.pos}")
+        raise ParseError(
+            f"Expected break at position {self.pos}",
+            text=self.text,
+            pos=self.pos
+        )
 
     def parse_emphasis(self, marker: str) -> Optional[Emphasis]:
         self.trace_enter(f"parse_emphasis(marker={marker!r})")
@@ -426,7 +517,9 @@ class Parser:
         if end_pos < 0:
             self.trace_exit(f"parse_emphasis(marker={marker!r})")
             raise ParseError(
-                f"Unterminated emphasis marker {marker!r} at position {self.pos}"
+                f"Unterminated emphasis marker {marker!r} at position {self.pos}",
+                text=self.text,
+                pos=self.pos
             )
         self.advance(len(marker))
         content_text = self.text[self.pos : end_pos]
@@ -435,7 +528,9 @@ class Parser:
         if not inner_parser.at_eof():
             self.trace_exit(f"parse_emphasis(marker={marker!r})")
             raise ParseError(
-                f"Could not consume emphasis content for marker {marker!r}"
+                f"Could not consume emphasis content for marker {marker!r}",
+                text=self.text,
+                pos=self.pos
             )
         self.pos = end_pos + len(marker)
         self.trace_exit(f"parse_emphasis(marker={marker!r})")
@@ -478,7 +573,11 @@ class Parser:
         match = re.match(r"[A-Za-z0-9_-]+", self.remaining())
         if not match:
             self.trace_exit("parse_identifier")
-            raise ParseError(f"Expected identifier at position {self.pos}")
+            raise ParseError(
+                f"Expected identifier at position {self.pos}",
+                text=self.text,
+                pos=self.pos
+            )
         identifier = match.group(0)
         self.advance(len(identifier))
         self.trace_exit("parse_identifier")
@@ -516,7 +615,9 @@ class Parser:
         # print(f"EXPECT: token={token!r} pos={self.pos} next={self.text[self.pos:self.pos+20]!r}")
         if not self.peek(token):
             raise ParseError(
-                f"Expected {token!r} at position {self.pos} but found {self.text[self.pos:self.pos+20]!r}"
+                f"Expected {token!r} at position {self.pos} but found {self.text[self.pos:self.pos+20]!r}",
+                text=self.text,
+                pos=self.pos
             )
         self.advance(len(token))
 
