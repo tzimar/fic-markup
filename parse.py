@@ -331,13 +331,8 @@ class Parser:
                 or self.peek("]")
             ):
                 if metadata:
-                    if not allow_metadata_newlines:
-                        return []
-                    raise ParseError(
-                        f"Metadata not followed by text or paragraph item at position {self.pos}",
-                        text=self.text,
-                        pos=self.pos
-                    )
+                    items.append(Text(content="", metadata=metadata))
+                    continue
                 break
             node = self.try_parse_paragraph_item(metadata)
             if node is not None:

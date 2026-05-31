@@ -274,17 +274,26 @@ def render_paragraph(
 
 
 def render_para_content(para: Paragraph, config: RenderConfig) -> str:
-    parts: List[str] = []
-    for i, part in enumerate(para.parts):
+    rendered_parts: List[tuple[str, str]] = []
+    for part in para.parts:
         if isinstance(part, Narration):
-            if i > 0:
-                # After dialogue
-                parts.append(f"&#x202F;— ")
-            parts.append(render_narration(part, config))
+            content = render_narration(part, config)
+            rendered_parts.append(("narration", content))
         elif isinstance(part, Dialogue):
-            # Before dialogue
-            parts.append(f" —&#x202F;")
-            parts.append(render_dialogue(part, config))
+            content = render_dialogue(part, config)
+            if content:
+                rendered_parts.append(("dialogue", content))
+
+    parts: List[str] = []
+    for i, (kind, content) in enumerate(rendered_parts):
+        if kind == "narration":
+            if i > 0 and rendered_parts[i - 1][0] == "dialogue":
+                parts.append("&#x202F;— ")
+            parts.append(content)
+        else:
+            if i > 0:
+                parts.append(" —&#x202F;")
+            parts.append(content)
     return "".join(parts)
 
 
