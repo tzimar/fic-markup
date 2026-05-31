@@ -68,7 +68,7 @@ def inline_block(content: str = None) -> str:
     if random.random() < 0.5:
         attrs.append(f".{rand_identifier()}")
     if random.random() < 0.2:
-        attrs.insert(0, f"#{rand_identifier()}")
+        attrs.insert(0, f"{rand_identifier()}")
     attrs_str = " ".join(attrs)
     if content is None:
         content = rand_text(1, 4)
@@ -134,7 +134,10 @@ def paragraph() -> str:
     text = narration()
     if random.random() < 0.6:
         parts = []
-        parts.append(text)
+        if random.random() < 0.5:
+            parts.append(text)
+        else:
+            parts.append("")
         alt = random.randint(1, 3)
         for i in range(alt):
             parts.append("=")
@@ -191,7 +194,7 @@ def generate_ffml(max_items=100, allow_top_metadata=True) -> str:
     body = "\n\n".join(body_items)
     modifiers = []
     if random.random() < 0.5:
-        modifiers.append(f"#{rand_identifier()}")
+        modifiers.append(f"{rand_identifier()}")
     for _ in range(random.randint(0, 2)):
         if random.random() < 0.5:
             modifiers.append(f".{rand_identifier()}")
