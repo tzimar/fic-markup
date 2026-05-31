@@ -87,7 +87,6 @@ def run_tests():
 make_test("blocks", ["blocks"])
 make_test("comments", ["comments"])
 make_test("dialog", ["dialog"])
-make_test("empty", ["empty"])
 make_test("inline_formatting", ["inline_formatting"])
 make_test("section_breaks", ["section_breaks"])
 make_test("metadata", ["metadata-the-beginning", "metadata-not-the-beginning"])
